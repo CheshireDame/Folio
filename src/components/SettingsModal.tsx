@@ -1,5 +1,35 @@
+import { useState } from 'react'
+import type { CustomTheme } from '../lib/storage'
+
 const ACCENT_PRESETS = ['#c4a882','#d4a0a0','#90b090','#90a8c0','#b0a0d0','#c8906a','#e8c060','#a0c4d0','#d0a0c0','#80c0a0']
 const BG_PRESETS = ['#1a1814','#f5f0e8','#1c2128','#1a1f1a','#1e1a26','#0d0d0d','#ffffff','#faf8f4','#1a1a2e','#0f1923']
+
+const LANGS = [
+  { code: 'en',    name: 'English' },
+  { code: 'en-US', name: 'English (US)' },
+  { code: 'en-GB', name: 'English (UK)' },
+  { code: 'en-AU', name: 'English (AU)' },
+  { code: 'fr',    name: 'French' },
+  { code: 'es',    name: 'Spanish' },
+  { code: 'de',    name: 'German' },
+  { code: 'it',    name: 'Italian' },
+  { code: 'pt',    name: 'Portuguese' },
+  { code: 'pt-BR', name: 'Portuguese (BR)' },
+  { code: 'nl',    name: 'Dutch' },
+  { code: 'ru',    name: 'Russian' },
+  { code: 'pl',    name: 'Polish' },
+  { code: 'sv',    name: 'Swedish' },
+  { code: 'da',    name: 'Danish' },
+  { code: 'no',    name: 'Norwegian' },
+  { code: 'fi',    name: 'Finnish' },
+  { code: 'tr',    name: 'Turkish' },
+  { code: 'uk',    name: 'Ukrainian' },
+  { code: 'ar',    name: 'Arabic' },
+  { code: 'ja',    name: 'Japanese' },
+  { code: 'zh-CN', name: 'Chinese (Simplified)' },
+  { code: 'zh-TW', name: 'Chinese (Traditional)' },
+  { code: 'ko',    name: 'Korean' },
+]
 
 interface Theme {
   name: string; bg: string; surface: string; text: string; text2: string
@@ -30,28 +60,52 @@ interface SettingsModalProps {
   onBgBlur: (n: number) => void
   onBgDim: (n: number) => void
   onTypewriter: (b: boolean) => void
+  showScrollbar: boolean
+  onShowScrollbar: (b: boolean) => void
+  canvasAlign: 'left' | 'center' | 'right'
+  onCanvasAlign: (s: 'left' | 'center' | 'right') => void
+  spellCheckLang: string
+  onSpellCheckLang: (s: string) => void
   canvasBg: string
   canvasOpacity: number
   canvasBlur: number
+  canvasPadding: number
   shadowColor: string
   shadowOpacity: number
   shadowRange: number
   onCanvasBg: (s: string) => void
   onCanvasOpacity: (n: number) => void
   onCanvasBlur: (n: number) => void
+  onCanvasPadding: (n: number) => void
   onShadowColor: (s: string) => void
   onShadowOpacity: (n: number) => void
   onShadowRange: (n: number) => void
+  accentPresets: string[]
+  bgPresets: string[]
+  onSaveAccentPreset: () => void
+  onDeleteAccentPreset: (i: number) => void
+  onSaveBgPreset: () => void
+  onDeleteBgPreset: (i: number) => void
+  customThemes: CustomTheme[]
+  onSaveCustomTheme: (name: string) => void
+  onDeleteCustomTheme: (i: number) => void
+  onApplyCustomTheme: (t: CustomTheme) => void
 }
 
 export default function SettingsModal({
   open, themes, currentTheme, fontSize, editorWidth, lineHeight,
-  accentColor, bgColor, bgImage, bgBlur, bgDim, typewriterMode,
+  accentColor, bgColor, bgImage, bgBlur, bgDim, typewriterMode, showScrollbar, canvasAlign,
   onClose, onTheme, onFontSize, onEditorWidth, onLineHeight,
-  onAccentColor, onBgColor, onBgImage, onBgBlur, onBgDim, onTypewriter,
-  canvasBg, canvasOpacity, canvasBlur, shadowColor, shadowOpacity, shadowRange,
-  onCanvasBg, onCanvasOpacity, onCanvasBlur, onShadowColor, onShadowOpacity, onShadowRange
+  onAccentColor, onBgColor, onBgImage, onBgBlur, onBgDim, onTypewriter, onShowScrollbar, onCanvasAlign, onSpellCheckLang,
+  spellCheckLang,
+  canvasBg, canvasOpacity, canvasBlur, canvasPadding, shadowColor, shadowOpacity, shadowRange,
+  onCanvasBg, onCanvasOpacity, onCanvasBlur, onCanvasPadding, onShadowColor, onShadowOpacity, onShadowRange,
+  accentPresets, bgPresets, onSaveAccentPreset, onDeleteAccentPreset, onSaveBgPreset, onDeleteBgPreset,
+  customThemes, onSaveCustomTheme, onDeleteCustomTheme, onApplyCustomTheme,
 }: SettingsModalProps) {
+  const [saveName, setSaveName]           = useState('')
+  const [showSaveInput, setShowSaveInput] = useState(false)
+
   if (!open) return null
 
   const label = (text: string) => (
@@ -85,6 +139,32 @@ export default function SettingsModal({
     </div>
   )
 
+  const savedSwatches = (
+    presets: string[],
+    onSave: () => void,
+    onDelete: (i: number) => void,
+    onApply: (c: string) => void
+  ) => (
+    <div style={{ display: 'flex', alignItems: 'center', gap: 6, paddingLeft: 130, marginBottom: 10, flexWrap: 'wrap' as const }}>
+      {presets.map((c, i) => (
+        <div key={i} style={{ position: 'relative' as const }}
+          onMouseOver={e => { const x = e.currentTarget.querySelector<HTMLElement>('.del'); if (x) x.style.opacity = '1' }}
+          onMouseOut={e => { const x = e.currentTarget.querySelector<HTMLElement>('.del'); if (x) x.style.opacity = '0' }}
+        >
+          <div onClick={() => onApply(c)} title="Apply" style={{ width: 22, height: 22, borderRadius: 5, background: c, cursor: 'pointer', border: '2px solid var(--border)', transition: 'border-color 0.15s' }}
+            onMouseOver={e => e.currentTarget.style.borderColor = 'white'}
+            onMouseOut={e => e.currentTarget.style.borderColor = 'var(--border)'}
+          />
+          <button className="del" onClick={() => onDelete(i)} style={{ position: 'absolute' as const, top: -5, right: -5, width: 13, height: 13, borderRadius: '50%', background: '#555', border: 'none', color: '#fff', fontSize: 8, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', opacity: 0, transition: 'opacity 0.15s', padding: 0 }}>✕</button>
+        </div>
+      ))}
+      <button onClick={onSave} style={{ padding: '2px 8px', background: 'transparent', border: '1px dashed var(--border)', color: 'var(--text3)', borderRadius: 4, cursor: 'pointer', fontFamily: '"JetBrains Mono", monospace', fontSize: 10, letterSpacing: '0.06em', textTransform: 'uppercase' as const }}
+        onMouseOver={e => e.currentTarget.style.color = 'var(--accent)'}
+        onMouseOut={e => e.currentTarget.style.color = 'var(--text3)'}
+      >+ Save</button>
+    </div>
+  )
+
   return (
     <div onClick={onClose} style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.75)', zIndex: 200, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
       <div onClick={e => e.stopPropagation()} style={{ background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 12, padding: 28, width: 520, maxHeight: '85vh', overflowY: 'auto' }}>
@@ -92,17 +172,56 @@ export default function SettingsModal({
 
         <div style={{ marginBottom: 20 }}>
           {label('Theme')}
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5,1fr)', gap: 8 }}>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(88px, 1fr))', gap: 8, marginBottom: 10 }}>
             {themes.map((t, i) => (
               <div key={t.name} onClick={() => onTheme(i)} style={{ height: 36, borderRadius: 6, background: t.bg, border: i === currentTheme ? '2px solid ' + t.accent : '2px solid ' + t.border, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 10, color: t.text2 }}>{t.name}</div>
             ))}
+            {customThemes.map((t, i) => (
+              <div key={'c' + i}
+                onClick={() => onApplyCustomTheme(t)}
+                onMouseOver={e => { const x = e.currentTarget.querySelector<HTMLElement>('.del'); if (x) x.style.opacity = '1' }}
+                onMouseOut={e => { const x = e.currentTarget.querySelector<HTMLElement>('.del'); if (x) x.style.opacity = '0' }}
+                style={{ position: 'relative' as const, height: 36, borderRadius: 6, overflow: 'hidden', border: '2px solid ' + t.border, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+              >
+                {t.bgImage
+                  ? <img src={t.bgImage} style={{ position: 'absolute' as const, inset: 0, width: '100%', height: '100%', objectFit: 'cover' as const, opacity: 0.7 }} alt="" />
+                  : <div style={{ position: 'absolute' as const, inset: 0, background: t.bg }} />}
+                <span style={{ position: 'relative' as const, zIndex: 1, fontSize: 10, color: t.text2, textShadow: t.bgImage ? '0 1px 3px rgba(0,0,0,0.8)' : 'none' }}>{t.name}</span>
+                <button className="del" onClick={e => { e.stopPropagation(); onDeleteCustomTheme(i) }}
+                  style={{ position: 'absolute' as const, top: 3, right: 3, width: 14, height: 14, borderRadius: '50%', background: 'rgba(0,0,0,0.65)', border: 'none', color: '#fff', fontSize: 8, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', opacity: 0, transition: 'opacity 0.15s', padding: 0, zIndex: 2 }}>✕</button>
+              </div>
+            ))}
           </div>
+          {showSaveInput ? (
+            <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
+              <input autoFocus type="text" value={saveName} onChange={e => setSaveName(e.target.value)}
+                onKeyDown={e => {
+                  if (e.key === 'Enter' && saveName.trim()) { onSaveCustomTheme(saveName.trim()); setSaveName(''); setShowSaveInput(false) }
+                  if (e.key === 'Escape') { setSaveName(''); setShowSaveInput(false) }
+                }}
+                placeholder="Theme name…"
+                style={{ flex: 1, background: 'var(--surface)', border: '1px solid var(--accent)', color: 'var(--text)', padding: '5px 10px', borderRadius: 5, fontFamily: '"JetBrains Mono", monospace', fontSize: 11, outline: 'none' }}
+              />
+              <button onClick={() => { if (saveName.trim()) { onSaveCustomTheme(saveName.trim()); setSaveName(''); setShowSaveInput(false) } }}
+                style={{ padding: '5px 12px', background: 'var(--accent)', border: 'none', color: '#1a1814', borderRadius: 5, cursor: 'pointer', fontFamily: '"JetBrains Mono", monospace', fontSize: 10, fontWeight: 600 }}>Save</button>
+              <button onClick={() => { setSaveName(''); setShowSaveInput(false) }}
+                style={{ padding: '5px 10px', background: 'transparent', border: '1px solid var(--border)', color: 'var(--text3)', borderRadius: 5, cursor: 'pointer', fontFamily: '"JetBrains Mono", monospace', fontSize: 10 }}>✕</button>
+            </div>
+          ) : (
+            <button onClick={() => setShowSaveInput(true)}
+              style={{ padding: '4px 12px', background: 'transparent', border: '1px dashed var(--border)', color: 'var(--text3)', borderRadius: 5, cursor: 'pointer', fontFamily: '"JetBrains Mono", monospace', fontSize: 10, letterSpacing: '0.06em', textTransform: 'uppercase' as const }}
+              onMouseOver={e => e.currentTarget.style.color = 'var(--accent)'}
+              onMouseOut={e => e.currentTarget.style.color = 'var(--text3)'}
+            >+ Save current as theme</button>
+          )}
         </div>
 
         <div style={{ marginBottom: 20 }}>
           {label('Colors')}
           {colorPicker('Accent', accentColor, onAccentColor, ACCENT_PRESETS)}
+          {savedSwatches(accentPresets, onSaveAccentPreset, onDeleteAccentPreset, c => onAccentColor(c))}
           {colorPicker('Background', bgColor, onBgColor, BG_PRESETS)}
+          {savedSwatches(bgPresets, onSaveBgPreset, onDeleteBgPreset, c => onBgColor(c))}
         </div>
 
         <div style={{ marginBottom: 20 }}>
@@ -150,6 +269,18 @@ export default function SettingsModal({
             </div>
             {slider('Opacity', canvasOpacity, onCanvasOpacity, 10, 100, 5, '%')}
             {slider('Backdrop blur', canvasBlur, onCanvasBlur, 0, 20, 1, 'px')}
+            {slider('Padding', canvasPadding, onCanvasPadding, 0, 80, 4, 'px')}
+            <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 10 }}>
+              <span style={{ fontSize: 12, color: 'var(--text2)', width: 120 }}>Position</span>
+              <div style={{ display: 'flex', gap: 4 }}>
+                {(['left','center','right'] as const).map(a => (
+                  <button key={a} onClick={() => onCanvasAlign(a)} style={{ padding: '4px 12px', borderRadius: 4, border: '1px solid var(--border)', background: canvasAlign === a ? 'rgba(196,168,130,0.2)' : 'transparent', color: canvasAlign === a ? 'var(--accent)' : 'var(--text3)', cursor: 'pointer', fontFamily: '"JetBrains Mono", monospace', fontSize: 10, textTransform: 'capitalize', letterSpacing: '0.05em' }}
+                    onMouseOver={e => { if (canvasAlign !== a) e.currentTarget.style.color = 'var(--text)' }}
+                    onMouseOut={e => { if (canvasAlign !== a) e.currentTarget.style.color = 'var(--text3)' }}
+                  >{a}</button>
+                ))}
+              </div>
+            </div>
             <div style={{ marginTop: 8, paddingTop: 8, borderTop: '1px solid var(--border)' }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 10 }}>
                 <span style={{ fontSize: 12, color: 'var(--text2)', width: 120 }}>Shadow color</span>
@@ -170,10 +301,37 @@ export default function SettingsModal({
           {slider('Line Spacing', lineHeight, onLineHeight, 1.4, 2.4, 0.05)}
         </div>
 
-        <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 20 }}>
-          <span style={{ fontSize: 12, color: 'var(--text2)', width: 120 }}>Typewriter mode</span>
-          <input type="checkbox" checked={typewriterMode} onChange={e => onTypewriter(e.target.checked)} style={{ accentColor: 'var(--accent)', width: 16, height: 16 }} />
-          <span style={{ fontSize: 12, color: 'var(--text3)' }}>Keep cursor centered</span>
+        <div style={{ marginBottom: 20 }}>
+          {label('Editor Behaviour')}
+          <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 10 }}>
+            <span style={{ fontSize: 12, color: 'var(--text2)', width: 120 }}>Typewriter mode</span>
+            <input type="checkbox" checked={typewriterMode} onChange={e => onTypewriter(e.target.checked)} style={{ accentColor: 'var(--accent)', width: 16, height: 16 }} />
+            <span style={{ fontSize: 12, color: 'var(--text3)' }}>Keep cursor centred</span>
+          </div>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 10 }}>
+            <span style={{ fontSize: 12, color: 'var(--text2)', width: 120 }}>Scrollbar</span>
+            <input type="checkbox" checked={showScrollbar} onChange={e => onShowScrollbar(e.target.checked)} style={{ accentColor: 'var(--accent)', width: 16, height: 16 }} />
+            <span style={{ fontSize: 12, color: 'var(--text3)' }}>Show scrollbar in editor</span>
+          </div>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+            <span style={{ fontSize: 12, color: 'var(--text2)', width: 120, flexShrink: 0 }}>Spell check</span>
+            <select
+              value={LANGS.find(l => l.code === spellCheckLang) ? spellCheckLang : ''}
+              onChange={e => { if (e.target.value) onSpellCheckLang(e.target.value) }}
+              style={{ flex: 1, background: 'var(--surface)', border: '1px solid var(--border)', color: 'var(--text)', padding: '4px 6px', borderRadius: 5, fontFamily: '"JetBrains Mono", monospace', fontSize: 11, outline: 'none' }}
+            >
+              <option value="">— pick —</option>
+              {LANGS.map(l => <option key={l.code} value={l.code}>{l.name}</option>)}
+            </select>
+            <input
+              type="text"
+              value={spellCheckLang}
+              onChange={e => onSpellCheckLang(e.target.value)}
+              placeholder="e.g. en-US"
+              title="Any BCP 47 language tag"
+              style={{ width: 80, background: 'var(--surface)', border: '1px solid var(--border)', color: 'var(--text)', padding: '4px 8px', borderRadius: 5, fontFamily: '"JetBrains Mono", monospace', fontSize: 11, outline: 'none' }}
+            />
+          </div>
         </div>
 
         <button onClick={onClose} style={{ width: '100%', padding: 10, background: 'transparent', border: '1px solid var(--border)', color: 'var(--text2)', borderRadius: 6, cursor: 'pointer', fontFamily: '"JetBrains Mono", monospace', fontSize: 11, letterSpacing: '0.08em', textTransform: 'uppercase' as const }}>Close</button>

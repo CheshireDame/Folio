@@ -10,17 +10,20 @@ interface ToolbarProps {
   onToggleTypewriter: () => void
   onToggleTimer: () => void
   onOpenSettings: () => void
-  onComment: () => void
   onImage: () => void
   onToggleFormattingBar: () => void
   showFormattingBar: boolean
+  onNewNote: () => void
+  onToggleAudio: () => void
+  audioOpen: boolean
 }
 
 export default function Toolbar({
   currentDraft, focusMode, timerRunning,
   onNew, onSave, onExport, onTogglePanel,
   onToggleFocus, onToggleTypewriter, onToggleTimer,
-  onOpenSettings, onComment, onImage, onToggleFormattingBar: _ftb, showFormattingBar: _sfb
+  onOpenSettings, onImage, onToggleFormattingBar: _ftb, showFormattingBar: _sfb, onNewNote,
+  onToggleAudio, audioOpen,
 }: ToolbarProps) {
   if (focusMode) return null
 
@@ -81,15 +84,17 @@ export default function Toolbar({
       {btn('Save', onSave)}
       {btn('Export', onExport)}
       {sep()}
-      {btn('Comment', onComment)}
       {btn('Image', onImage)}
+      {sep()}
+      {btn('Note', onNewNote)}
+      {btn('Audio', onToggleAudio, audioOpen)}
       {sep()}
       {btn('Panel', onTogglePanel)}
       {btn('Focus', onToggleFocus)}
       {btn('Typewriter', onToggleTypewriter)}
       {btn('Timer', onToggleTimer, timerRunning)}
       {sep()}
-      {btn('Themes', onOpenSettings)}
+      {btn('Settings', onOpenSettings)}
 
       <div style={{ flex: 1 }} />
       <span style={{

@@ -1,6 +1,7 @@
 import { useEffect, useState, useRef } from 'react'
 import { Editor } from '@tiptap/react'
 import { Mark, mergeAttributes } from '@tiptap/core'
+import type { Comment } from '../lib/storage'
 
 // Custom Tiptap mark for comments
 export const CommentMark = Mark.create({
@@ -20,12 +21,6 @@ export const CommentMark = Mark.create({
     }), 0]
   },
 })
-
-interface Comment {
-  id: string
-  text: string
-  anchored: boolean
-}
 
 interface CommentPopupProps {
   x: number
@@ -155,7 +150,28 @@ export default function CommentSystem({ editor, comments, onCommentsChange, trig
     return () => document.removeEventListener('mousedown', onMouseDown)
   }, [editor])
 
-  // Handle comment trigger (button click or Ctrl+M)
+  // Ctrl+M keyboard shortcut — capture selection synchronously (popupOnly instance only)
+  useEffect(() => {
+    if (!popupOnly) return
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (!((e.ctrlKey || e.metaKey) && e.key === 'm')) return
+      e.preventDefault()
+      if (!editor) return
+      const { from, to } = editor.state.selection
+      if (from !== to) {
+        const coords = editor.view.coordsAtPos(from)
+        setPopup({ x: coords.left, y: coords.bottom, range: { from, to } })
+      } else {
+        const wrap = document.querySelector('.folio-editor-wrap') as HTMLElement
+        const rect = wrap?.getBoundingClientRect() ?? { left: window.innerWidth / 2 - 130, top: 100 }
+        setPopup({ x: (rect as DOMRect).left + 20, y: (rect as DOMRect).top + 80, range: null })
+      }
+    }
+    document.addEventListener('keydown', onKeyDown)
+    return () => document.removeEventListener('keydown', onKeyDown)
+  }, [editor, popupOnly])
+
+  // Handle comment trigger from button click
   useEffect(() => {
     if (!triggerComment || !editor) return
     onTriggerHandled()
@@ -168,9 +184,8 @@ export default function CommentSystem({ editor, comments, onCommentsChange, trig
       const coords = editor.view.coordsAtPos(range ? range.from : from)
       setPopup({ x: coords.left, y: coords.bottom, range: range || { from, to } })
     } else {
-      // Free-floating note, position in center
       const wrap = document.querySelector('.folio-editor-wrap') as HTMLElement
-      const rect = wrap?.getBoundingClientRect() ?? { left: window.innerWidth/2 - 130, top: 100 }
+      const rect = wrap?.getBoundingClientRect() ?? { left: window.innerWidth / 2 - 130, top: 100 }
       setPopup({ x: rect.left + 20, y: (rect as DOMRect).top + 80, range: null })
     }
   }, [triggerComment])

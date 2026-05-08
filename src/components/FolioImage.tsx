@@ -6,6 +6,7 @@ import { useState, useRef, useEffect } from 'react'
 function ImageView({ node, updateAttributes, deleteNode }: any) {
   const { src, alt, width, layout } = node.attrs
   const [showToolbar, setShowToolbar] = useState(false)
+  const [toolbarRect, setToolbarRect] = useState<DOMRect | null>(null)
   const [dragging, setDragging] = useState(false)
   const [dragPos, setDragPos] = useState({ x: 0, y: 0 })
   const [startPos, setStartPos] = useState({ x: 0, y: 0 })
@@ -18,11 +19,21 @@ function ImageView({ node, updateAttributes, deleteNode }: any) {
     const handler = (e: MouseEvent) => {
       if (wrapRef.current && !wrapRef.current.contains(e.target as HTMLElement)) {
         setShowToolbar(false)
+        setToolbarRect(null)
+      }
+    }
+    const onScroll = () => {
+      if (showToolbar && wrapRef.current) {
+        setToolbarRect(wrapRef.current.getBoundingClientRect())
       }
     }
     document.addEventListener('mousedown', handler)
-    return () => document.removeEventListener('mousedown', handler)
-  }, [])
+    document.addEventListener('scroll', onScroll, true)
+    return () => {
+      document.removeEventListener('mousedown', handler)
+      document.removeEventListener('scroll', onScroll, true)
+    }
+  }, [showToolbar])
 
   const handleDragStart = (e: React.MouseEvent) => {
     if (!isFree) return
@@ -110,7 +121,11 @@ function ImageView({ node, updateAttributes, deleteNode }: any) {
       <div
         ref={wrapRef}
         style={wrapStyle}
-        onClick={() => setShowToolbar(true)}
+        onClick={() => {
+          const rect = wrapRef.current?.getBoundingClientRect() ?? null
+          setToolbarRect(rect)
+          setShowToolbar(true)
+        }}
         onMouseDown={isFree ? handleDragStart : undefined}
       >
         <img
@@ -120,13 +135,14 @@ function ImageView({ node, updateAttributes, deleteNode }: any) {
           draggable={false}
         />
 
-        {showToolbar && (
+        {showToolbar && toolbarRect && (
           <div
             onMouseDown={e => e.stopPropagation()}
             style={{
-              position: 'absolute', bottom: '100%', left: '50%',
-              transform: 'translateX(-50%)',
-              marginBottom: 6, zIndex: 500,
+              position: 'fixed',
+              left: Math.max(8, Math.min(toolbarRect.left + toolbarRect.width / 2 - 240, window.innerWidth - 488)),
+              top: Math.max(8, toolbarRect.top - 46),
+              zIndex: 1000,
               background: '#1a1814', border: '1px solid #3a3630',
               borderRadius: 7, padding: '4px 6px',
               display: 'flex', alignItems: 'center', gap: 2,

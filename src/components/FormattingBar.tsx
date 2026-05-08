@@ -19,7 +19,7 @@ export default function FormattingBar({ editor, visible }: FormattingBarProps) {
 
   const closeAll = () => { setShowFonts(false); setShowSizes(false); setShowColors(false) }
 
-  const btn = (label: string, action: () => void, active = false, title = '') => (
+  const btn = (label: string, action: () => void, active = false, title = '', labelStyle?: React.CSSProperties) => (
     <button
       key={label}
       onMouseDown={e => { e.preventDefault(); action() }}
@@ -36,11 +36,10 @@ export default function FormattingBar({ editor, visible }: FormattingBarProps) {
         whiteSpace: 'nowrap' as const,
         flexShrink: 0,
         transition: 'color 0.15s',
-        fontWeight: active ? 600 : 400,
       }}
       onMouseOver={e => { if(!active) e.currentTarget.style.color = 'var(--text)' }}
       onMouseOut={e => { if(!active) e.currentTarget.style.color = 'var(--text2)' }}
-    >{label}</button>
+    >{labelStyle ? <span style={labelStyle}>{label}</span> : label}</button>
   )
 
   const sep = () => (
@@ -107,7 +106,8 @@ export default function FormattingBar({ editor, visible }: FormattingBarProps) {
       height: 36,
       gap: 2,
       flexShrink: 0,
-      overflowX: 'auto',
+      position: 'relative',
+      zIndex: 10,
     }}>
       {dd(currentFont, showFonts, () => setShowFonts(f => !f),
         FONTS.map(f => ({ label: f, action: () => editor.chain().focus().setFontFamily(f).run(), style: { fontFamily: f } }))
@@ -117,18 +117,22 @@ export default function FormattingBar({ editor, visible }: FormattingBarProps) {
         SIZES.map(s => ({ label: s + 'px', action: () => editor.chain().focus().setMark('textStyle', { fontSize: s + 'px' }).run() }))
       )}
       {sep()}
-      {btn('B',  () => editor.chain().focus().toggleBold().run(),      editor.isActive('bold'),      'Bold')}
-      {btn('I',  () => editor.chain().focus().toggleItalic().run(),    editor.isActive('italic'),    'Italic')}
-      {btn('U',  () => editor.chain().focus().toggleUnderline().run(), editor.isActive('underline'), 'Underline')}
-      {btn('S',  () => editor.chain().focus().toggleStrike().run(),    editor.isActive('strike'),    'Strikethrough')}
+      {btn('B', () => editor.chain().focus().toggleBold().run(),      editor.isActive('bold'),      'Bold',          { fontWeight: 700 })}
+      {btn('I', () => editor.chain().focus().toggleItalic().run(),    editor.isActive('italic'),    'Italic',        { fontStyle: 'italic' })}
+      {btn('U', () => editor.chain().focus().toggleUnderline().run(), editor.isActive('underline'), 'Underline',     { textDecoration: 'underline' })}
+      {btn('S', () => editor.chain().focus().toggleStrike().run(),    editor.isActive('strike'),    'Strikethrough', { textDecoration: 'line-through' })}
       {sep()}
       {btn('H1', () => editor.chain().focus().toggleHeading({ level: 1 }).run(), editor.isActive('heading', { level: 1 }))}
       {btn('H2', () => editor.chain().focus().toggleHeading({ level: 2 }).run(), editor.isActive('heading', { level: 2 }))}
       {btn('H3', () => editor.chain().focus().toggleHeading({ level: 3 }).run(), editor.isActive('heading', { level: 3 }))}
       {sep()}
-      {btn('≡ L', () => editor.chain().focus().setTextAlign('left').run(),   editor.isActive({ textAlign: 'left' }),   'Align left')}
-      {btn('≡ C', () => editor.chain().focus().setTextAlign('center').run(), editor.isActive({ textAlign: 'center' }), 'Align center')}
-      {btn('≡ R', () => editor.chain().focus().setTextAlign('right').run(),  editor.isActive({ textAlign: 'right' }),  'Align right')}
+      {btn('≡ L', () => editor.chain().focus().setTextAlign('left').run(),    editor.isActive({ textAlign: 'left' }),    'Align left')}
+      {btn('≡ C', () => editor.chain().focus().setTextAlign('center').run(),  editor.isActive({ textAlign: 'center' }),  'Align center')}
+      {btn('≡ R', () => editor.chain().focus().setTextAlign('right').run(),   editor.isActive({ textAlign: 'right' }),   'Align right')}
+      {btn('≡ J', () => editor.chain().focus().setTextAlign('justify').run(), editor.isActive({ textAlign: 'justify' }), 'Justify')}
+      {sep()}
+      {btn('x²', () => editor.chain().focus().toggleSuperscript().run(), editor.isActive('superscript'), 'Superscript')}
+      {btn('x₂', () => editor.chain().focus().toggleSubscript().run(),   editor.isActive('subscript'),   'Subscript')}
       {sep()}
       {dd('🎨 Color', showColors, () => setShowColors(c => !c),
         COLORS.map(c => ({

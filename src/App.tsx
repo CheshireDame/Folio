@@ -9,15 +9,19 @@ import { Color } from '@tiptap/extension-color'
 import { TextStyle } from '@tiptap/extension-text-style'
 import Underline from '@tiptap/extension-underline'
 import Highlight from '@tiptap/extension-highlight'
+import Superscript from '@tiptap/extension-superscript'
+import Subscript from '@tiptap/extension-subscript'
+import CommentSystem, { CommentMark } from './components/CommentSystem'
 import { useState, useEffect, useRef, useCallback } from 'react'
 import Toolbar from './components/Toolbar'
 import StatsBar from './components/StatsBar'
 import SettingsModal from './components/SettingsModal'
 import SidePanel from './components/SidePanel'
-import CommentSystem, { CommentMark } from './components/CommentSystem'
 import BubbleToolbar from './components/BubbleToolbar'
 import FormattingBar from './components/FormattingBar'
-import { saveData, loadData } from './lib/storage'
+import { saveData, loadData, saveAudioTracks, loadAudioTracks, CustomTheme, StickyNote, AudioTrack, NoteSection, Comment } from './lib/storage'
+import StickyLayer from './components/StickyLayer'
+import AudioPlayer from './components/AudioPlayer'
 import ExportModal from './components/ExportModal'
 import './App.css'
 
@@ -30,7 +34,13 @@ const THEMES = [
 ]
 
 interface Draft { content: string; savedAt?: string }
-interface Comment { id: string; text: string; anchored: boolean }
+
+function hexToRgba(hex: string, alpha: number): string {
+  const r = parseInt(hex.slice(1,3),16)
+  const g = parseInt(hex.slice(3,5),16)
+  const b = parseInt(hex.slice(5,7),16)
+  return `rgba(${r},${g},${b},${alpha})`
+}
 
 function darken(hex: string, amt = 0.35): string {
   const r = parseInt(hex.slice(1,3),16)
@@ -50,6 +60,7 @@ export default function App() {
  const [canvasBg, setCanvasBg]             = useState('transparent')
   const [canvasOpacity, setCanvasOpacity]   = useState(100)
   const [canvasBlur, setCanvasBlur]         = useState(0)
+  const [canvasPadding, setCanvasPadding]   = useState(32)
   const [shadowColor, setShadowColor]       = useState('#000000')
   const [shadowOpacity, setShadowOpacity]   = useState(0)
   const [shadowRange, setShadowRange]       = useState(20)
@@ -62,6 +73,16 @@ export default function App() {
   const [showPanel, setShowPanel]           = useState(false)
   const [showExport, setShowExport]         = useState(false)
   const [showFormattingBar, setShowFormattingBar] = useState(true)
+  const [showScrollbar, setShowScrollbar]         = useState(false)
+  const [canvasAlign, setCanvasAlign]             = useState<'left'|'center'|'right'>('center')
+  const [stickyNotes, setStickyNotes]             = useState<StickyNote[]>([])
+  const [editorScrollTop, setEditorScrollTop]     = useState(0)
+  const [spellCheckLang, setSpellCheckLang]       = useState('en')
+  const [audioTracks, setAudioTracks]             = useState<AudioTrack[]>([])
+  const [showAudio, setShowAudio]                 = useState(false)
+  const [notesSections, setNotesSections]         = useState<NoteSection[]>([])
+  const [comments, setComments]                   = useState<Comment[]>([])
+  const [triggerComment, setTriggerComment]       = useState(false)
   const [panelTab, setPanelTab]             = useState<'notes'|'comments'|'drafts'>('notes')
   const [wordGoal, setWordGoal]             = useState(500)
   const [timer, setTimer]                   = useState(0)
@@ -69,11 +90,16 @@ export default function App() {
   const [drafts, setDrafts]                 = useState<Record<string, Draft>>({ untitled: { content: '', savedAt: new Date().toISOString() } })
   const [currentDraft, setCurrentDraft]     = useState('untitled')
   const [notes, setNotes]                   = useState('')
-  const [comments, setComments]             = useState<Comment[]>([])
-  const [triggerComment, setTriggerComment] = useState(false)
+  const [accentPresets, setAccentPresets]   = useState<string[]>([])
+  const [bgPresets, setBgPresets]           = useState<string[]>([])
+  const [customThemes, setCustomThemes]     = useState<CustomTheme[]>([])
+
   const timerRef      = useRef<number | null>(null)
   const imageInputRef = useRef<HTMLInputElement>(null)
   const saveTimeout   = useRef<number | null>(null)
+  const editorWrapRef = useRef<HTMLDivElement>(null)
+  const canvasRef     = useRef<HTMLDivElement>(null)
+  const workspaceRef  = useRef<HTMLDivElement>(null)
   const theme = THEMES[themeIdx]
 
   const editor = useEditor({
@@ -82,13 +108,15 @@ export default function App() {
       FolioImage,
       Placeholder.configure({ placeholder: 'Begin writing…' }),
       CharacterCount,
-      CommentMark,
       Underline,
       TextStyle,
       FontFamily,
       Color,
       Highlight.configure({ multicolor: true }),
       TextAlign.configure({ types: ['heading', 'paragraph'] }),
+      Superscript,
+      Subscript,
+      CommentMark,
     ],
     content: '',
     editorProps: { attributes: { class: 'folio-editor' } },
@@ -107,12 +135,23 @@ export default function App() {
         setWordGoal(data.settings.wordGoal ?? 500)
         setTypewriterMode(data.settings.typewriterMode ?? false)
         setShowFormattingBar(data.settings.showFormattingBar ?? true)
+        setShowScrollbar(data.settings.showScrollbar ?? false)
+        setCanvasAlign(data.settings.canvasAlign ?? 'center')
+        setStickyNotes(data.stickyNotes ?? [])
+        setNotesSections(data.notesSections ?? [])
+        setComments(data.comments ?? [])
         setDrafts(data.drafts ?? { untitled: { content: '', savedAt: new Date().toISOString() } })
         setCurrentDraft(data.currentDraft ?? 'untitled')
         setNotes(data.notes ?? '')
+        setAccentPresets(data.settings.accentPresets ?? [])
+        setBgPresets(data.settings.bgPresets ?? [])
+        setCustomThemes(data.settings.customThemes ?? [])
+        setCanvasPadding(data.settings.canvasPadding ?? 32)
+        setSpellCheckLang(data.settings.spellCheckLang ?? 'en')
       }
       setLoaded(true)
     })
+    loadAudioTracks().then(setAudioTracks)
   }, [])
 
   // Load draft content into editor once both editor and data are ready
@@ -156,6 +195,18 @@ export default function App() {
     editor.view.dom.setAttribute('style', `font-size:${fontSize}px;line-height:${lineHeight};`)
   }, [fontSize, lineHeight, editor])
 
+  // Audio tracks persistence
+  useEffect(() => {
+    if (audioTracks.length > 0) saveAudioTracks(audioTracks)
+  }, [audioTracks])
+
+  // Spell-check language
+  useEffect(() => {
+    if (!editor) return
+    editor.view.dom.setAttribute('lang', spellCheckLang)
+    editor.view.dom.setAttribute('spellcheck', 'true')
+  }, [spellCheckLang, editor])
+
   // Timer
   useEffect(() => {
     if (timerRunning) {
@@ -171,7 +222,7 @@ export default function App() {
     if (!loaded) return
     if (saveTimeout.current) clearTimeout(saveTimeout.current)
     saveTimeout.current = window.setTimeout(() => {
-      saveData({ drafts, currentDraft, notes, settings: { themeIdx, accentColor, bgColor, bgImage, bgBlur, bgDim,  fontSize, editorWidth, lineHeight, wordGoal, typewriterMode, showFormattingBar } })
+      saveData({ drafts, currentDraft, notes, notesSections, comments, stickyNotes, settings: { themeIdx, accentColor, bgColor, bgImage, bgBlur, bgDim, fontSize, editorWidth, lineHeight, wordGoal, typewriterMode, showFormattingBar, canvasPadding, accentPresets, bgPresets, customThemes, showScrollbar, canvasAlign, spellCheckLang } })
     }, 1500)
   }, [drafts, currentDraft, notes, themeIdx, accentColor, bgColor, fontSize, editorWidth, lineHeight, wordGoal, typewriterMode, loaded])
 
@@ -180,8 +231,7 @@ export default function App() {
     const handler = (e: KeyboardEvent) => {
       if ((e.ctrlKey || e.metaKey) && e.key === 's') { e.preventDefault(); saveDraft() }
       if ((e.ctrlKey || e.metaKey) && e.key === 'e') { e.preventDefault(); setShowExport(true) }
-      if ((e.ctrlKey || e.metaKey) && e.key === 'm') { e.preventDefault(); setTriggerComment(true) }
-      if (e.key === 'Escape') { setShowSettings(false); setShowExport(false); setFocusMode(false) }
+if (e.key === 'Escape') { setShowSettings(false); setShowExport(false); setFocusMode(false) }
       if (e.key === 'F11') { e.preventDefault(); setFocusMode(f => !f) }
     }
     window.addEventListener('keydown', handler)
@@ -218,6 +268,20 @@ export default function App() {
       if (remaining.length) loadDraft(remaining[remaining.length - 1])
       else { setCurrentDraft('untitled'); setDrafts({ untitled: { content: '', savedAt: new Date().toISOString() } }); editor?.commands.clearContent() }
     }
+  }
+
+  const createNote = () => {
+    const ws = workspaceRef.current
+    const note: StickyNote = {
+      id: Date.now().toString(),
+      content: '',
+      x: ws ? ws.offsetWidth / 2 - 105 : 200,
+      viewportY: ws ? ws.offsetHeight / 2 - 80 : 100,
+      documentY: null,
+      color: '#f5e6a3',
+      fontSize: 13,
+    }
+    setStickyNotes(n => [...n, note])
   }
 
 const handleImageFile = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -259,28 +323,44 @@ const handleImageFile = (e: React.ChangeEvent<HTMLInputElement>) => {
         onToggleTypewriter={() => setTypewriterMode(t => !t)}
         onToggleTimer={() => setTimerRunning(r => !r)}
         onOpenSettings={() => setShowSettings(true)}
-        onComment={() => setTriggerComment(true)}
         onImage={() => imageInputRef.current?.click()}
         onToggleFormattingBar={() => setShowFormattingBar(f => !f)}
         showFormattingBar={showFormattingBar}
+        onNewNote={createNote}
+        onToggleAudio={() => setShowAudio(a => !a)}
+        audioOpen={showAudio}
       />
       <FormattingBar editor={editor} visible={showFormattingBar} />
-      <div style={{ display: 'flex', flex: 1, overflow: 'hidden' }}>
-        <div className="folio-editor-wrap" style={{ flex: 1, overflowY: 'auto', padding: typewriterMode ? '42vh 48px 60px' : '60px 48px', display: 'flex', justifyContent: 'center' }} onClick={() => focusMode && setFocusMode(false)}>
-          <div className={canvasBlur > 0 ? 'folio-canvas-blur' : ''} style={{ width: '100%', maxWidth: editorWidth, position: 'relative', background: canvasBg === 'transparent' && canvasBlur > 0 ? 'rgba(0,0,0,0.01)' : canvasBg === 'transparent' ? 'transparent' : canvasBg, backdropFilter: canvasBlur > 0 ? 'blur(' + canvasBlur + 'px)' : undefined,
-WebkitBackdropFilter: canvasBlur > 0 ? 'blur(' + canvasBlur + 'px)' : undefined, boxShadow: shadowOpacity > 0 ? '0 0 ' + shadowRange + 'px rgba(' + parseInt(shadowColor.slice(1,3),16) + ',' + parseInt(shadowColor.slice(3,5),16) + ',' + parseInt(shadowColor.slice(5,7),16) + ',' + shadowOpacity/100 + ')' : undefined, borderRadius: shadowOpacity > 0 || canvasBg !== 'transparent' ? 8 : 0, padding: canvasBg !== 'transparent' ? '32px' : undefined, transition: 'all 0.3s' }}>
-            <EditorContent editor={editor} />
-            <BubbleToolbar editor={editor} />
+      <div ref={workspaceRef} style={{ display: 'flex', flex: 1, overflow: 'hidden', position: 'relative' }}>
+        <div style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: canvasAlign === 'left' ? 'flex-start' : canvasAlign === 'right' ? 'flex-end' : 'center', overflow: 'hidden', padding: '20px 48px' }} onClick={() => focusMode && setFocusMode(false)}>
+          <div ref={canvasRef} className={canvasBlur > 0 ? 'folio-canvas-blur' : ''} style={{ width: '100%', maxWidth: editorWidth, flex: 1, position: 'relative', background: canvasBg === 'transparent' && canvasBlur > 0 ? 'rgba(0,0,0,0.01)' : canvasBg === 'transparent' ? 'transparent' : hexToRgba(canvasBg, canvasOpacity / 100), backdropFilter: canvasBlur > 0 ? 'blur(' + canvasBlur + 'px)' : undefined,
+WebkitBackdropFilter: canvasBlur > 0 ? 'blur(' + canvasBlur + 'px)' : undefined, boxShadow: shadowOpacity > 0 ? '0 0 ' + shadowRange + 'px rgba(' + parseInt(shadowColor.slice(1,3),16) + ',' + parseInt(shadowColor.slice(3,5),16) + ',' + parseInt(shadowColor.slice(5,7),16) + ',' + shadowOpacity/100 + ')' : undefined, borderRadius: shadowOpacity > 0 || canvasBg !== 'transparent' ? 8 : 0, transition: 'all 0.3s' }}>
+            <div ref={editorWrapRef} className={`folio-editor-wrap${showScrollbar ? ' scrollbar-visible' : ''}`} style={{ position: 'absolute', top: canvasPadding, right: canvasPadding, bottom: canvasPadding, left: canvasPadding, overflowY: 'auto', paddingTop: typewriterMode ? '42vh' : undefined }} onScroll={e => setEditorScrollTop((e.currentTarget as HTMLDivElement).scrollTop)}>
+              <EditorContent editor={editor} />
+              <BubbleToolbar editor={editor} onTriggerComment={() => setTriggerComment(true)} />
+              <CommentSystem
+                popupOnly
+                editor={editor}
+                comments={comments}
+                onCommentsChange={setComments}
+                triggerComment={triggerComment}
+                onTriggerHandled={() => setTriggerComment(false)}
+              />
+            </div>
           </div>
         </div>
         <SidePanel
-          open={showPanel} activeTab={panelTab} notes={notes}
+          open={showPanel} activeTab={panelTab}
+          notesSections={notesSections} comments={comments}
           drafts={drafts} currentDraft={currentDraft}
-          comments={comments} editor={editor}
-          onTabChange={setPanelTab} onNotesChange={setNotes}
+          editor={editor}
+          onTabChange={setPanelTab}
+          onNotesSectionsChange={setNotesSections}
+          onCommentsChange={setComments}
           onLoadDraft={loadDraft} onNewDraft={newDraft}
-          onDeleteDraft={deleteDraft} onCommentsChange={setComments}
+          onDeleteDraft={deleteDraft}
         />
+        <StickyLayer notes={stickyNotes} scrollTop={editorScrollTop} onChange={setStickyNotes} />
       </div>
       <StatsBar
         words={words} chars={chars} wordGoal={wordGoal}
@@ -298,13 +378,33 @@ WebkitBackdropFilter: canvasBlur > 0 ? 'blur(' + canvasBlur + 'px)' : undefined,
         onFontSize={setFontSize} onEditorWidth={setEditorWidth}
         onLineHeight={setLineHeight} onAccentColor={setAccentColor}
         onBgColor={setBgColor} onTypewriter={setTypewriterMode}
+        showScrollbar={showScrollbar} onShowScrollbar={setShowScrollbar}
+        canvasAlign={canvasAlign} onCanvasAlign={setCanvasAlign}
+        spellCheckLang={spellCheckLang} onSpellCheckLang={setSpellCheckLang}
         bgImage={bgImage} bgBlur={bgBlur} bgDim={bgDim}
         onBgImage={setBgImage} onBgBlur={setBgBlur} onBgDim={setBgDim}
-        canvasBg={canvasBg} canvasOpacity={canvasOpacity} canvasBlur={canvasBlur}
+        canvasBg={canvasBg} canvasOpacity={canvasOpacity} canvasBlur={canvasBlur} canvasPadding={canvasPadding} onCanvasPadding={setCanvasPadding}
         shadowColor={shadowColor} shadowOpacity={shadowOpacity} shadowRange={shadowRange}
         onCanvasBg={setCanvasBg} onCanvasOpacity={setCanvasOpacity} onCanvasBlur={setCanvasBlur}
         onShadowColor={setShadowColor} onShadowOpacity={setShadowOpacity} onShadowRange={setShadowRange}
-
+        accentPresets={accentPresets} bgPresets={bgPresets}
+        onSaveAccentPreset={() => setAccentPresets(p => [...p, accentColor])}
+        onDeleteAccentPreset={(i: number) => setAccentPresets(p => p.filter((_, idx) => idx !== i))}
+        onSaveBgPreset={() => setBgPresets(p => [...p, bgColor || theme.bg])}
+        onDeleteBgPreset={(i: number) => setBgPresets(p => p.filter((_, idx) => idx !== i))}
+        customThemes={customThemes}
+        onSaveCustomTheme={(name: string) => setCustomThemes(p => [...p, {
+          name,
+          bg: bgColor || theme.bg, surface: theme.surface, text: theme.text,
+          text2: theme.text2, text3: theme.text3, border: theme.border,
+          toolbar: theme.toolbar, accent: accentColor,
+          bgImage, bgBlur, bgDim,
+        }])}
+        onDeleteCustomTheme={(i: number) => setCustomThemes(p => p.filter((_, idx) => idx !== i))}
+        onApplyCustomTheme={(t: CustomTheme) => {
+          setBgColor(t.bg); setAccentColor(t.accent)
+          setBgImage(t.bgImage); setBgBlur(t.bgBlur); setBgDim(t.bgDim)
+        }}
       />
       <ExportModal
         open={showExport}
@@ -312,11 +412,17 @@ WebkitBackdropFilter: canvasBlur > 0 ? 'blur(' + canvasBlur + 'px)' : undefined,
         draftName={currentDraft}
         onClose={() => setShowExport(false)}
       />
-      <CommentSystem
-        editor={editor} comments={comments} onCommentsChange={setComments}
-        triggerComment={triggerComment} onTriggerHandled={() => setTriggerComment(false)}
+<input ref={imageInputRef} type="file" accept="image/*" style={{ display: 'none' }} onChange={handleImageFile} />
+      <AudioPlayer
+        open={showAudio}
+        tracks={audioTracks}
+        onAddTrack={t => setAudioTracks(ts => [...ts, t])}
+        onRemoveTrack={id => setAudioTracks(ts => {
+          const updated = ts.filter(t => t.id !== id)
+          saveAudioTracks(updated)
+          return updated
+        })}
       />
-      <input ref={imageInputRef} type="file" accept="image/*" style={{ display: 'none' }} onChange={handleImageFile} />
     </div>
   )
-} 
+} //hi :3

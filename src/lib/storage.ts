@@ -6,10 +6,31 @@ interface Draft {
   savedAt?: string
 }
 
+export interface StickyNote {
+  id: string
+  content: string
+  x: number
+  viewportY: number
+  documentY: number | null
+  color: string
+  fontSize: number
+  minimized?: boolean
+}
+
+export interface CustomTheme {
+  name: string
+  bg: string; surface: string; text: string; text2: string
+  text3: string; border: string; toolbar: string; accent: string
+  bgImage: string; bgBlur: number; bgDim: number
+}
+
 interface FolioData {
   drafts: Record<string, Draft>
   currentDraft: string
   notes: string
+  notesSections?: NoteSection[]
+  comments?: Comment[]
+  stickyNotes?: StickyNote[]
   settings: {
     themeIdx: number
     accentColor: string
@@ -30,6 +51,13 @@ interface FolioData {
     shadowOpacity?: number
     shadowRange?: number
     toolbarOpacity?: number
+    canvasPadding?: number
+    accentPresets?: string[]
+    bgPresets?: string[]
+    customThemes?: CustomTheme[]
+    showScrollbar?: boolean
+    canvasAlign?: 'left' | 'center' | 'right'
+    spellCheckLang?: string
   }
 }
 
@@ -62,6 +90,53 @@ export async function loadData(): Promise<FolioData | null> {
   } catch (e) {
     console.error('Failed to load:', e)
     return null
+  }
+}
+
+export interface NoteSection {
+  id: string
+  title: string
+  content: string
+  minimized?: boolean
+}
+
+export interface Comment {
+  id: string
+  text: string
+  anchored: boolean
+}
+
+export interface AudioTrack {
+  id: string
+  name: string
+  data: string  // base64 data URL
+}
+
+async function getAudioPath(): Promise<string> {
+  const dir = await appDataDir()
+  const folioDir = await join(dir, 'Folio')
+  const dirExists = await exists(folioDir)
+  if (!dirExists) await mkdir(folioDir, { recursive: true })
+  return join(folioDir, 'audio.json')
+}
+
+export async function saveAudioTracks(tracks: AudioTrack[]): Promise<void> {
+  try {
+    const path = await getAudioPath()
+    await writeTextFile(path, JSON.stringify(tracks))
+  } catch (e) {
+    console.error('Failed to save audio:', e)
+  }
+}
+
+export async function loadAudioTracks(): Promise<AudioTrack[]> {
+  try {
+    const path = await getAudioPath()
+    if (!(await exists(path))) return []
+    return JSON.parse(await readTextFile(path)) as AudioTrack[]
+  } catch (e) {
+    console.error('Failed to load audio:', e)
+    return []
   }
 }
 
