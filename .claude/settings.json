@@ -1,0 +1,11 @@
+{
+  "permissions": {
+    "allow": [
+      "PowerShell(Test-Path *)",
+      "PowerShell(Get-ChildItem *)",
+      "PowerShell(Get-Command *)",
+      "PowerShell(& \"$env:USERPROFILE\\.cargo\\bin\\rustc.exe\" --version*)",
+      "PowerShell(& \"$env:USERPROFILE\\.cargo\\bin\\cargo.exe\" --version*)"
+    ]
+  }
+}

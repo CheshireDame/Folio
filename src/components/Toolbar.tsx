@@ -7,7 +7,6 @@ interface ToolbarProps {
   onExport: () => void
   onTogglePanel: () => void
   onToggleFocus: () => void
-  onToggleTypewriter: () => void
   onToggleTimer: () => void
   onOpenSettings: () => void
   onImage: () => void
@@ -16,16 +15,19 @@ interface ToolbarProps {
   onNewNote: () => void
   onToggleAudio: () => void
   audioOpen: boolean
+  autoHideBars: boolean
+  onToggleAutoHideBars: () => void
+  imageMode: 'text' | 'workspace'
+  onToggleImageMode: () => void
 }
 
 export default function Toolbar({
   currentDraft, focusMode, timerRunning,
   onNew, onSave, onExport, onTogglePanel,
-  onToggleFocus, onToggleTypewriter, onToggleTimer,
+  onToggleFocus, onToggleTimer,
   onOpenSettings, onImage, onToggleFormattingBar: _ftb, showFormattingBar: _sfb, onNewNote,
-  onToggleAudio, audioOpen,
+  onToggleAudio, audioOpen, autoHideBars, onToggleAutoHideBars, imageMode, onToggleImageMode,
 }: ToolbarProps) {
-  if (focusMode) return null
 
   const btn = (label: string, action: () => void, active = false) => (
     <button
@@ -85,13 +87,14 @@ export default function Toolbar({
       {btn('Export', onExport)}
       {sep()}
       {btn('Image', onImage)}
+      {btn(imageMode === 'text' ? '→text' : '→ws', onToggleImageMode, false)}
       {sep()}
       {btn('Note', onNewNote)}
       {btn('Audio', onToggleAudio, audioOpen)}
       {sep()}
       {btn('Panel', onTogglePanel)}
-      {btn('Focus', onToggleFocus)}
-      {btn('Typewriter', onToggleTypewriter)}
+      {btn('Focus', onToggleFocus, focusMode)}
+      {btn('Autohide', onToggleAutoHideBars, autoHideBars)}
       {btn('Timer', onToggleTimer, timerRunning)}
       {sep()}
       {btn('Settings', onOpenSettings)}

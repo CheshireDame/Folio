@@ -1,5 +1,6 @@
-import { useState } from 'react'
-import type { CustomTheme } from '../lib/storage'
+import { useState, useRef } from 'react'
+import type { CustomTheme, CustomKeySounds } from '../lib/storage'
+import type { SoundType } from '../lib/keyboardSounds'
 
 const ACCENT_PRESETS = ['#c4a882','#d4a0a0','#90b090','#90a8c0','#b0a0d0','#c8906a','#e8c060','#a0c4d0','#d0a0c0','#80c0a0']
 const BG_PRESETS = ['#1a1814','#f5f0e8','#1c2128','#1a1f1a','#1e1a26','#0d0d0d','#ffffff','#faf8f4','#1a1a2e','#0f1923']
@@ -48,7 +49,6 @@ interface SettingsModalProps {
   bgImage: string
   bgBlur: number
   bgDim: number
-  typewriterMode: boolean
   onClose: () => void
   onTheme: (i: number) => void
   onFontSize: (n: number) => void
@@ -59,7 +59,6 @@ interface SettingsModalProps {
   onBgImage: (s: string) => void
   onBgBlur: (n: number) => void
   onBgDim: (n: number) => void
-  onTypewriter: (b: boolean) => void
   showScrollbar: boolean
   onShowScrollbar: (b: boolean) => void
   canvasAlign: 'left' | 'center' | 'right'
@@ -90,21 +89,36 @@ interface SettingsModalProps {
   onSaveCustomTheme: (name: string) => void
   onDeleteCustomTheme: (i: number) => void
   onApplyCustomTheme: (t: CustomTheme) => void
+  keySounds: boolean
+  onKeySounds: (b: boolean) => void
+  keySoundsVolume: number
+  onKeySoundsVolume: (n: number) => void
+  customKeySounds: CustomKeySounds
+  onCustomKeySound: (type: SoundType, url: string | null) => void
+  onPreviewSound: (type: SoundType) => void
 }
 
 export default function SettingsModal({
   open, themes, currentTheme, fontSize, editorWidth, lineHeight,
-  accentColor, bgColor, bgImage, bgBlur, bgDim, typewriterMode, showScrollbar, canvasAlign,
+  accentColor, bgColor, bgImage, bgBlur, bgDim, showScrollbar, canvasAlign,
   onClose, onTheme, onFontSize, onEditorWidth, onLineHeight,
-  onAccentColor, onBgColor, onBgImage, onBgBlur, onBgDim, onTypewriter, onShowScrollbar, onCanvasAlign, onSpellCheckLang,
+  onAccentColor, onBgColor, onBgImage, onBgBlur, onBgDim, onShowScrollbar, onCanvasAlign, onSpellCheckLang,
   spellCheckLang,
   canvasBg, canvasOpacity, canvasBlur, canvasPadding, shadowColor, shadowOpacity, shadowRange,
   onCanvasBg, onCanvasOpacity, onCanvasBlur, onCanvasPadding, onShadowColor, onShadowOpacity, onShadowRange,
   accentPresets, bgPresets, onSaveAccentPreset, onDeleteAccentPreset, onSaveBgPreset, onDeleteBgPreset,
   customThemes, onSaveCustomTheme, onDeleteCustomTheme, onApplyCustomTheme,
+  keySounds, onKeySounds, keySoundsVolume, onKeySoundsVolume,
+  customKeySounds, onCustomKeySound, onPreviewSound,
 }: SettingsModalProps) {
   const [saveName, setSaveName]           = useState('')
   const [showSaveInput, setShowSaveInput] = useState(false)
+  const soundInputRefs = {
+    click:     useRef<HTMLInputElement>(null),
+    space:     useRef<HTMLInputElement>(null),
+    return:    useRef<HTMLInputElement>(null),
+    backspace: useRef<HTMLInputElement>(null),
+  }
 
   if (!open) return null
 
@@ -304,15 +318,60 @@ export default function SettingsModal({
         <div style={{ marginBottom: 20 }}>
           {label('Editor Behaviour')}
           <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 10 }}>
-            <span style={{ fontSize: 12, color: 'var(--text2)', width: 120 }}>Typewriter mode</span>
-            <input type="checkbox" checked={typewriterMode} onChange={e => onTypewriter(e.target.checked)} style={{ accentColor: 'var(--accent)', width: 16, height: 16 }} />
-            <span style={{ fontSize: 12, color: 'var(--text3)' }}>Keep cursor centred</span>
-          </div>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 10 }}>
             <span style={{ fontSize: 12, color: 'var(--text2)', width: 120 }}>Scrollbar</span>
             <input type="checkbox" checked={showScrollbar} onChange={e => onShowScrollbar(e.target.checked)} style={{ accentColor: 'var(--accent)', width: 16, height: 16 }} />
             <span style={{ fontSize: 12, color: 'var(--text3)' }}>Show scrollbar in editor</span>
           </div>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 10 }}>
+            <span style={{ fontSize: 12, color: 'var(--text2)', width: 120 }}>Keyboard sounds</span>
+            <input type="checkbox" checked={keySounds} onChange={e => onKeySounds(e.target.checked)} style={{ accentColor: 'var(--accent)', width: 16, height: 16 }} />
+            <span style={{ fontSize: 12, color: 'var(--text3)' }}>Typewriter click on each key</span>
+          </div>
+          {keySounds && (
+            <>
+              {slider('Volume', Math.round(keySoundsVolume * 100), v => onKeySoundsVolume(v / 100), 5, 100, 5, '%')}
+              <div style={{ marginBottom: 10 }}>
+                {(['click', 'space', 'return', 'backspace'] as SoundType[]).map(type => {
+                  const hasCustom = !!customKeySounds[type]
+                  const names: Record<SoundType, string> = { click: 'Key click', space: 'Space', return: 'Enter', backspace: 'Backspace' }
+                  return (
+                    <div key={type} style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 7 }}>
+                      <span style={{ fontSize: 12, color: 'var(--text2)', width: 120, flexShrink: 0 }}>{names[type]}</span>
+                      <input
+                        ref={soundInputRefs[type]}
+                        type="file" accept="audio/*"
+                        style={{ display: 'none' }}
+                        onChange={e => {
+                          const file = e.target.files?.[0]
+                          if (!file) return
+                          const reader = new FileReader()
+                          reader.onload = ev => onCustomKeySound(type, ev.target?.result as string)
+                          reader.readAsDataURL(file)
+                          e.target.value = ''
+                        }}
+                      />
+                      <button
+                        onClick={() => soundInputRefs[type].current?.click()}
+                        style={{ padding: '3px 10px', background: hasCustom ? 'rgba(196,168,130,0.15)' : 'transparent', border: '1px solid var(--border)', color: hasCustom ? 'var(--accent)' : 'var(--text3)', borderRadius: 5, cursor: 'pointer', fontFamily: '"JetBrains Mono", monospace', fontSize: 10, letterSpacing: '0.05em' }}
+                      >{hasCustom ? '✦ custom' : '+ upload'}</button>
+                      <button
+                        onClick={() => onPreviewSound(type)}
+                        title="Preview"
+                        style={{ padding: '3px 8px', background: 'transparent', border: '1px solid var(--border)', color: 'var(--text3)', borderRadius: 5, cursor: 'pointer', fontSize: 11 }}
+                      >▶</button>
+                      {hasCustom && (
+                        <button
+                          onClick={() => onCustomKeySound(type, null)}
+                          title="Revert to synthesized"
+                          style={{ padding: '3px 8px', background: 'transparent', border: '1px solid var(--border)', color: 'var(--text3)', borderRadius: 5, cursor: 'pointer', fontFamily: '"JetBrains Mono", monospace', fontSize: 10 }}
+                        >✕</button>
+                      )}
+                    </div>
+                  )
+                })}
+              </div>
+            </>
+          )}
           <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
             <span style={{ fontSize: 12, color: 'var(--text2)', width: 120, flexShrink: 0 }}>Spell check</span>
             <select
