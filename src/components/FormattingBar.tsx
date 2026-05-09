@@ -7,13 +7,19 @@ interface FormattingBarProps {
 }
 
 const FONTS = ['Crimson Pro','Playfair Display','JetBrains Mono','Georgia','Arial','Times New Roman']
-const COLORS = ['#e8e2d9','#c4a882','#d4a0a0','#90b090','#90a8c0','#b0a0d0','#ffffff','#aaaaaa','#666666','#333333']
+const COLORS = [
+  '#e8e2d9','#c4a882','#d4a0a0','#c8906a','#e8c060',
+  '#90b090','#90a8c0','#b0a0d0','#a0c4d0','#80c0a0',
+  '#ffffff','#cccccc','#999999','#555555','#222222',
+  '#e05050','#5080e0','#50c060','#c050c0','#e0a030',
+]
 const SIZES  = [12,14,16,18,20,22,24,28,32,36,48]
 
 export default function FormattingBar({ editor, visible }: FormattingBarProps) {
-  const [showFonts,  setShowFonts]  = useState(false)
-  const [showSizes,  setShowSizes]  = useState(false)
-  const [showColors, setShowColors] = useState(false)
+  const [showFonts,      setShowFonts]      = useState(false)
+  const [showSizes,      setShowSizes]      = useState(false)
+  const [showColors,     setShowColors]     = useState(false)
+  const [customColor,    setCustomColor]    = useState('#c4a882')
 
   if (!visible || !editor) return null
 
@@ -134,13 +140,46 @@ export default function FormattingBar({ editor, visible }: FormattingBarProps) {
       {btn('x²', () => editor.chain().focus().toggleSuperscript().run(), editor.isActive('superscript'), 'Superscript')}
       {btn('x₂', () => editor.chain().focus().toggleSubscript().run(),   editor.isActive('subscript'),   'Subscript')}
       {sep()}
-      {dd('🎨 Color', showColors, () => setShowColors(c => !c),
-        COLORS.map(c => ({
-          label: c,
-          action: () => editor.chain().focus().setColor(c).run(),
-          style: { color: c, display: 'flex', alignItems: 'center', gap: 8 },
-        }))
-      )}
+      {/* Color picker */}
+      <div style={{ position: 'relative', flexShrink: 0 }}>
+        <button
+          onMouseDown={e => { e.preventDefault(); closeAll(); if (!showColors) setShowColors(true) }}
+          title="Text color"
+          style={{ background: 'none', border: 'none', color: showColors ? 'var(--accent)' : 'var(--text2)', cursor: 'pointer', padding: '3px 8px', borderRadius: 3, fontSize: 11, fontFamily: '"JetBrains Mono", monospace', whiteSpace: 'nowrap' as const, flexShrink: 0 }}
+          onMouseOver={e => { if (!showColors) e.currentTarget.style.color = 'var(--text)' }}
+          onMouseOut={e => { if (!showColors) e.currentTarget.style.color = 'var(--text2)' }}
+        >🎨 Color</button>
+        {showColors && (
+          <div style={{ position: 'absolute', top: '100%', left: 0, marginTop: 4, background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 6, padding: 10, zIndex: 500, boxShadow: '0 8px 24px rgba(0,0,0,0.5)' }}>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5, 1fr)', gap: 5, marginBottom: 10 }}>
+              {COLORS.map(c => (
+                <div key={c} title={c}
+                  onMouseDown={e => { e.preventDefault(); editor.chain().focus().setColor(c).run(); setShowColors(false) }}
+                  style={{ width: 24, height: 24, borderRadius: '50%', background: c, cursor: 'pointer', border: '2px solid transparent', transition: 'border-color 0.1s, transform 0.1s', boxSizing: 'border-box' as const }}
+                  onMouseOver={e => { e.currentTarget.style.borderColor = 'white'; e.currentTarget.style.transform = 'scale(1.2)' }}
+                  onMouseOut={e => { e.currentTarget.style.borderColor = 'transparent'; e.currentTarget.style.transform = 'scale(1)' }}
+                />
+              ))}
+            </div>
+            <div style={{ display: 'flex', gap: 6, alignItems: 'center', borderTop: '1px solid var(--border)', paddingTop: 8 }}>
+              <div style={{ width: 24, height: 24, borderRadius: 4, background: customColor, border: '1px solid var(--border)', position: 'relative' as const, overflow: 'hidden', cursor: 'pointer', flexShrink: 0 }}>
+                <input type="color" value={customColor} onChange={e => setCustomColor(e.target.value)} style={{ position: 'absolute', inset: -4, opacity: 0, cursor: 'pointer', width: 'calc(100% + 8px)', height: 'calc(100% + 8px)' }} />
+              </div>
+              <input
+                type="text" value={customColor}
+                onChange={e => { if (/^#[0-9a-fA-F]{0,6}$/.test(e.target.value)) setCustomColor(e.target.value) }}
+                onKeyDown={e => { if (e.key === 'Enter' && /^#[0-9a-fA-F]{6}$/.test(customColor)) { editor.chain().focus().setColor(customColor).run(); setShowColors(false) } }}
+                placeholder="#hex"
+                style={{ flex: 1, background: 'var(--bg)', border: '1px solid var(--border)', color: 'var(--text)', padding: '3px 6px', borderRadius: 4, fontFamily: '"JetBrains Mono", monospace', fontSize: 11, outline: 'none', minWidth: 0 }}
+              />
+              <button
+                onMouseDown={e => { e.preventDefault(); if (/^#[0-9a-fA-F]{6}$/.test(customColor)) { editor.chain().focus().setColor(customColor).run(); setShowColors(false) } }}
+                style={{ padding: '3px 8px', background: 'var(--accent)', border: 'none', color: '#1a1814', borderRadius: 4, cursor: 'pointer', fontFamily: '"JetBrains Mono", monospace', fontSize: 10, fontWeight: 600, flexShrink: 0 }}
+              >Apply</button>
+            </div>
+          </div>
+        )}
+      </div>
       {sep()}
       {btn('•• List', () => editor.chain().focus().toggleBulletList().run(),  editor.isActive('bulletList'),  'Bullet list')}
       {btn('1. List',           () => editor.chain().focus().toggleOrderedList().run(), editor.isActive('orderedList'), 'Numbered list')}

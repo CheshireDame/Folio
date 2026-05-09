@@ -402,7 +402,7 @@ const handleImageFile = (e: React.ChangeEvent<HTMLInputElement>) => {
         style={{
           position: autoHideBars ? 'fixed' : 'relative',
           top: 0, left: 0, right: 0,
-          zIndex: autoHideBars ? 200 : undefined,
+          zIndex: autoHideBars ? 200 : 10,
           transform: autoHideBars && !barsHovered ? 'translateY(-100%)' : 'translateY(0)',
           transition: 'transform 0.2s ease',
           flexShrink: 0,
