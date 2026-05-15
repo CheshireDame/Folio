@@ -20,6 +20,7 @@ import SidePanel from './components/SidePanel'
 import BubbleToolbar from './components/BubbleToolbar'
 import FormattingBar from './components/FormattingBar'
 import { saveData, loadData, saveAudioTracks, loadAudioTracks, CustomTheme, StickyNote, AudioTrack, NoteSection, Comment } from './lib/storage'
+import { FontSize } from './lib/font-size'
 import StickyLayer from './components/StickyLayer'
 import AudioPlayer from './components/AudioPlayer'
 import ExportModal from './components/ExportModal'
@@ -116,6 +117,7 @@ export default function App() {
       TextAlign.configure({ types: ['heading', 'paragraph'] }),
       Superscript,
       Subscript,
+      FontSize,
       CommentMark,
     ],
     content: '',
