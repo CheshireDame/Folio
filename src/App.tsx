@@ -23,6 +23,7 @@ import BubbleToolbar from './components/BubbleToolbar'
 import FormattingBar from './components/FormattingBar'
 import { saveData, loadData, saveAudioTracks, loadAudioTracks, saveWorkspaceImages, loadWorkspaceImages, saveCustomKeySounds, loadCustomKeySounds, CustomTheme, StickyNote, AudioTrack, NoteSection, Comment, WorkspaceImage, CustomKeySounds } from './lib/storage'
 import { setCustomSound, previewSound, SoundType } from './lib/keyboardSounds'
+import { FontSize } from './lib/font-size'
 import StickyLayer from './components/StickyLayer'
 import WorkspaceImageLayer from './components/WorkspaceImageLayer'
 import AudioPlayer from './components/AudioPlayer'
@@ -138,6 +139,7 @@ const [showSettings, setShowSettings]     = useState(false)
       TextAlign.configure({ types: ['heading', 'paragraph'] }),
       Superscript,
       Subscript,
+      FontSize,
       CommentMark,
     ],
     content: '',
