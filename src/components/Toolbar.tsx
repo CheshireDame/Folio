@@ -3,6 +3,7 @@ interface ToolbarProps {
   focusMode: boolean
   timerRunning: boolean
   onNew: () => void
+  onOpen: () => void
   onSave: () => void
   onExport: () => void
   onTogglePanel: () => void
@@ -19,24 +20,30 @@ interface ToolbarProps {
   onToggleAutoHideBars: () => void
   imageMode: 'text' | 'workspace'
   onToggleImageMode: () => void
+  showSpacing: boolean
+  onToggleSpacing: () => void
+  showGlyphs: boolean
+  onToggleGlyphs: () => void
 }
 
 export default function Toolbar({
   currentDraft, focusMode, timerRunning,
-  onNew, onSave, onExport, onTogglePanel,
+  onNew, onOpen, onSave, onExport, onTogglePanel,
   onToggleFocus, onToggleTimer,
   onOpenSettings, onImage, onToggleFormattingBar: _ftb, showFormattingBar: _sfb, onNewNote,
   onToggleAudio, audioOpen, autoHideBars, onToggleAutoHideBars, imageMode, onToggleImageMode,
+  showSpacing, onToggleSpacing, showGlyphs, onToggleGlyphs,
 }: ToolbarProps) {
 
-  const btn = (label: string, action: () => void, active = false) => (
+  const btn = (label: string, action: () => void, active = false, title?: string) => (
     <button
       key={label}
       onClick={action}
+      title={title}
       style={{
-        background: active ? 'var(--surface)' : 'none',
+        background: active ? 'rgba(128,128,128,0.15)' : 'none',
         border: 'none',
-        color: active ? 'var(--accent)' : 'var(--text2)',
+        color: active ? 'var(--accent)' : 'var(--toolbar-text)',
         cursor: 'pointer',
         padding: '5px 8px',
         borderRadius: 4,
@@ -49,7 +56,7 @@ export default function Toolbar({
         flexShrink: 0,
       }}
       onMouseOver={e => { if(!active) e.currentTarget.style.color = 'var(--text)' }}
-      onMouseOut={e => { if(!active) e.currentTarget.style.color = 'var(--text2)' }}
+      onMouseOut={e => { if(!active) e.currentTarget.style.color = 'var(--toolbar-text)' }}
     >
       {label}
     </button>
@@ -83,11 +90,18 @@ export default function Toolbar({
       </span>
 
       {btn('New', onNew)}
+      {btn('Open', onOpen)}
       {btn('Save', onSave)}
       {btn('Export', onExport)}
       {sep()}
+      {btn('Spacing', onToggleSpacing, showSpacing)}
+      {btn('Glyphs', onToggleGlyphs, showGlyphs)}
+      {sep()}
       {btn('Image', onImage)}
-      {btn(imageMode === 'text' ? '→text' : '→ws', onToggleImageMode, false)}
+      {btn(imageMode === 'text' ? '→text' : '→ws', onToggleImageMode, false,
+        imageMode === 'text'
+          ? 'Images insert into the text flow. Click to switch to workspace mode (free-floating).'
+          : 'Images are placed as free-floating objects on the workspace. Click to switch to text mode.')}
       {sep()}
       {btn('Note', onNewNote)}
       {btn('Audio', onToggleAudio, audioOpen)}
@@ -103,7 +117,8 @@ export default function Toolbar({
       <span style={{
         fontFamily: '"JetBrains Mono", monospace',
         fontSize: 10,
-        color: 'var(--text3)',
+        color: 'var(--toolbar-text)',
+        opacity: 0.6,
         whiteSpace: 'nowrap',
       }}>
         {currentDraft}

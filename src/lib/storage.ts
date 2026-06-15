@@ -1,5 +1,110 @@
 import { readTextFile, writeTextFile, mkdir, exists } from '@tauri-apps/plugin-fs'
 import { appDataDir, join } from '@tauri-apps/api/path'
+import { save as dialogSave, open as dialogOpen } from '@tauri-apps/plugin-dialog'
+import { htmlToPlainText, htmlToMarkdown, buildHtml } from './export'
+import { htmlToRtf, rtfToHtml } from './rtf'
+
+export interface FolioFile {
+  version: number
+  title: string
+  content: string
+  savedAt: string
+}
+
+const FILE_FILTERS = [
+  { name: 'Folio Document', extensions: ['folio'] },
+  { name: 'Rich Text',      extensions: ['rtf']   },
+  { name: 'HTML',           extensions: ['html']  },
+  { name: 'Markdown',       extensions: ['md']    },
+  { name: 'Plain Text',     extensions: ['txt']   },
+]
+
+function htmlToFileContent(html: string, title: string, ext: string): string {
+  if (ext === 'rtf')  return htmlToRtf(html)
+  if (ext === 'html') return buildHtml(html, title)
+  if (ext === 'md')   return htmlToMarkdown(html)
+  if (ext === 'txt')  return htmlToPlainText(html)
+  // folio / fallback
+  const data: FolioFile = { version: 1, title, content: html, savedAt: new Date().toISOString() }
+  return JSON.stringify(data, null, 2)
+}
+
+function fileContentToHtml(text: string, ext: string): string {
+  if (ext === 'folio') {
+    try { return (JSON.parse(text) as FolioFile).content ?? '' } catch { return '' }
+  }
+  if (ext === 'rtf') return rtfToHtml(text)
+  if (ext === 'html') {
+    const m = text.match(/<body[^>]*>([\s\S]*?)<\/body>/i)
+    return m ? m[1].trim() : text
+  }
+  if (ext === 'md') return markdownToHtml(text)
+  // txt
+  return text.split(/\n\n+/).map(p => `<p>${p.replace(/\n/g, '<br>')}</p>`).join('')
+}
+
+function markdownToHtml(md: string): string {
+  return md.split(/\n\n+/).map(para => {
+    para = para.trim()
+    if (/^### /.test(para)) return `<h3>${escapeHtml(para.slice(4))}</h3>`
+    if (/^## /  .test(para)) return `<h2>${escapeHtml(para.slice(3))}</h2>`
+    if (/^# /   .test(para)) return `<h1>${escapeHtml(para.slice(2))}</h1>`
+    const inline = escapeHtml(para)
+      .replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>')
+      .replace(/_(.+?)_/g,       '<em>$1</em>')
+      .replace(/\n/g, '<br>')
+    return `<p>${inline}</p>`
+  }).join('')
+}
+
+function escapeHtml(s: string): string {
+  return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')
+}
+
+export async function saveDocumentToFile(
+  html: string,
+  title: string,
+  currentPath: string | null,
+): Promise<string | null> {
+  try {
+    let filePath: string | null = currentPath
+    if (!filePath) {
+      filePath = await dialogSave({
+        filters: FILE_FILTERS,
+        defaultPath: title || 'untitled',
+      })
+    }
+    if (!filePath) return null
+    const ext = filePath.split('.').pop()?.toLowerCase() ?? 'folio'
+    await writeTextFile(filePath, htmlToFileContent(html, title, ext))
+    return filePath
+  } catch (e) {
+    console.error('Failed to save file:', e)
+    return null
+  }
+}
+
+export async function openDocumentFromFile(): Promise<{ path: string; content: string; title: string } | null> {
+  try {
+    const selected = await dialogOpen({
+      filters: FILE_FILTERS,
+      multiple: false,
+    })
+    if (!selected) return null
+    const filePath = Array.isArray(selected) ? selected[0] : selected
+    const text = await readTextFile(filePath)
+    const ext = filePath.split('.').pop()?.toLowerCase() ?? 'folio'
+    const baseName = filePath.split(/[/\\]/).pop()?.replace(/\.[^.]+$/, '') ?? 'untitled'
+    const html = fileContentToHtml(text, ext)
+    const title = ext === 'folio'
+      ? (() => { try { return (JSON.parse(text) as FolioFile).title ?? baseName } catch { return baseName } })()
+      : baseName
+    return { path: filePath, content: html, title }
+  } catch (e) {
+    console.error('Failed to open file:', e)
+    return null
+  }
+}
 
 interface Draft {
   content: string
@@ -61,6 +166,9 @@ interface FolioData {
     imageMode?: 'text' | 'workspace'
     keySounds?: boolean
     keySoundsVolume?: number
+    toolbarColor?: string
+    toolbarTextColor?: string
+    paragraphSpacing?: number
   }
 }
 

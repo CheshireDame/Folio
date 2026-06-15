@@ -40,17 +40,19 @@ body {
   box-shadow: none !important;
   color: var(--text);
   font-family: 'Crimson Pro', Georgia, serif;
+  font-size: var(--editor-font-size, 20px);
+  line-height: var(--editor-line-height, 1.85);
   min-height: 100%;
   width: 100%;
   white-space: pre-wrap;
   tab-size: 4;
 }
 
-.ProseMirror p { margin-bottom: 0.8em; }
+.ProseMirror p { margin-bottom: var(--paragraph-spacing, 0.8em); }
 
 .ProseMirror p.is-editor-empty:first-child::before {
   content: attr(data-placeholder);
-  color: var(--text3);
+  color: var(--placeholder-color, var(--text3));
   font-style: italic;
   pointer-events: none;
   float: left;

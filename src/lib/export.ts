@@ -2,7 +2,7 @@ import { save } from '@tauri-apps/plugin-dialog'
 import { writeTextFile } from '@tauri-apps/plugin-fs'
 import { htmlToRtf } from './rtf'
 
-function htmlToPlainText(html: string): string {
+export function htmlToPlainText(html: string): string {
   const tmp = document.createElement('div')
   tmp.innerHTML = html
   tmp.querySelectorAll('img').forEach(img => {
@@ -11,7 +11,7 @@ function htmlToPlainText(html: string): string {
   return (tmp.innerText || tmp.textContent || '').trim()
 }
 
-function htmlToMarkdown(html: string): string {
+export function htmlToMarkdown(html: string): string {
   const tmp = document.createElement('div')
   tmp.innerHTML = html
   tmp.querySelectorAll('strong, b').forEach(el => {
@@ -32,7 +32,7 @@ function htmlToMarkdown(html: string): string {
   return (tmp.innerText || tmp.textContent || '').replace(/\n{3,}/g, '\n\n').trim()
 }
 
-function buildHtml(html: string, draftName: string): string {
+export function buildHtml(html: string, draftName: string): string {
   return `<!DOCTYPE html>
 <html lang="en">
 <head>

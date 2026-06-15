@@ -96,6 +96,10 @@ interface SettingsModalProps {
   customKeySounds: CustomKeySounds
   onCustomKeySound: (type: SoundType, url: string | null) => void
   onPreviewSound: (type: SoundType) => void
+  toolbarColor: string
+  onToolbarColor: (s: string) => void
+  toolbarTextColor: string
+  onToolbarTextColor: (s: string) => void
 }
 
 export default function SettingsModal({
@@ -110,6 +114,7 @@ export default function SettingsModal({
   customThemes, onSaveCustomTheme, onDeleteCustomTheme, onApplyCustomTheme,
   keySounds, onKeySounds, keySoundsVolume, onKeySoundsVolume,
   customKeySounds, onCustomKeySound, onPreviewSound,
+  toolbarColor, onToolbarColor, toolbarTextColor, onToolbarTextColor,
 }: SettingsModalProps) {
   const [saveName, setSaveName]           = useState('')
   const [showSaveInput, setShowSaveInput] = useState(false)
@@ -236,6 +241,35 @@ export default function SettingsModal({
           {savedSwatches(accentPresets, onSaveAccentPreset, onDeleteAccentPreset, c => onAccentColor(c))}
           {colorPicker('Background', bgColor, onBgColor, BG_PRESETS)}
           {savedSwatches(bgPresets, onSaveBgPreset, onDeleteBgPreset, c => onBgColor(c))}
+          <div style={{ borderTop: '1px solid var(--border)', marginTop: 8, paddingTop: 12 }}>
+            {label('Toolbar')}
+            <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 10 }}>
+              <span style={{ fontSize: 12, color: 'var(--text2)', width: 120 }}>Toolbar color</span>
+              <div style={{ width: 30, height: 30, borderRadius: 6, background: toolbarColor || 'var(--toolbar)', border: '1px solid var(--border)', position: 'relative' as const, overflow: 'hidden', cursor: 'pointer' }}>
+                <input type="color" value={toolbarColor || '#15130f'} onChange={e => onToolbarColor(e.target.value)} style={{ position: 'absolute', inset: -4, opacity: 0, cursor: 'pointer', width: 'calc(100% + 8px)', height: 'calc(100% + 8px)' }} />
+              </div>
+              <input type="text" value={toolbarColor} onChange={e => { if (/^#[0-9a-fA-F]{6}$/.test(e.target.value)) onToolbarColor(e.target.value) }} maxLength={7} placeholder="theme default" style={{ flex: 1, background: 'var(--surface)', border: '1px solid var(--border)', color: 'var(--text)', padding: '5px 8px', borderRadius: 5, fontFamily: '"JetBrains Mono", monospace', fontSize: 12, outline: 'none' }} />
+              {toolbarColor && (
+                <button onClick={() => onToolbarColor('')} title="Reset to theme default" style={{ padding: '4px 8px', background: 'transparent', border: '1px solid var(--border)', color: 'var(--text3)', borderRadius: 5, cursor: 'pointer', fontFamily: '"JetBrains Mono", monospace', fontSize: 10, textTransform: 'uppercase' as const, letterSpacing: '0.05em' }}
+                  onMouseOver={e => e.currentTarget.style.color = 'var(--accent)'}
+                  onMouseOut={e => e.currentTarget.style.color = 'var(--text3)'}
+                >Reset</button>
+              )}
+            </div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 10 }}>
+              <span style={{ fontSize: 12, color: 'var(--text2)', width: 120 }}>Toolbar text</span>
+              <div style={{ width: 30, height: 30, borderRadius: 6, background: toolbarTextColor || 'var(--text2)', border: '1px solid var(--border)', position: 'relative' as const, overflow: 'hidden', cursor: 'pointer' }}>
+                <input type="color" value={toolbarTextColor || '#a09890'} onChange={e => onToolbarTextColor(e.target.value)} style={{ position: 'absolute', inset: -4, opacity: 0, cursor: 'pointer', width: 'calc(100% + 8px)', height: 'calc(100% + 8px)' }} />
+              </div>
+              <input type="text" value={toolbarTextColor} onChange={e => { if (/^#[0-9a-fA-F]{6}$/.test(e.target.value)) onToolbarTextColor(e.target.value) }} maxLength={7} placeholder="theme default" style={{ flex: 1, background: 'var(--surface)', border: '1px solid var(--border)', color: 'var(--text)', padding: '5px 8px', borderRadius: 5, fontFamily: '"JetBrains Mono", monospace', fontSize: 12, outline: 'none' }} />
+              {toolbarTextColor && (
+                <button onClick={() => onToolbarTextColor('')} title="Reset to theme default" style={{ padding: '4px 8px', background: 'transparent', border: '1px solid var(--border)', color: 'var(--text3)', borderRadius: 5, cursor: 'pointer', fontFamily: '"JetBrains Mono", monospace', fontSize: 10, textTransform: 'uppercase' as const, letterSpacing: '0.05em' }}
+                  onMouseOver={e => e.currentTarget.style.color = 'var(--accent)'}
+                  onMouseOut={e => e.currentTarget.style.color = 'var(--text3)'}
+                >Reset</button>
+              )}
+            </div>
+          </div>
         </div>
 
         <div style={{ marginBottom: 20 }}>

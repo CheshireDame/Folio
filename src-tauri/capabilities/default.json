@@ -13,6 +13,7 @@
     "fs:allow-app-write-recursive",
     "fs:allow-write-text-file",
     "dialog:default",
-    "dialog:allow-save"
+    "dialog:allow-save",
+    "dialog:allow-open"
   ]
 }

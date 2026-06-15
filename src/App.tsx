@@ -21,7 +21,9 @@ import SettingsModal from './components/SettingsModal'
 import SidePanel from './components/SidePanel'
 import BubbleToolbar from './components/BubbleToolbar'
 import FormattingBar from './components/FormattingBar'
-import { saveData, loadData, saveAudioTracks, loadAudioTracks, saveWorkspaceImages, loadWorkspaceImages, saveCustomKeySounds, loadCustomKeySounds, CustomTheme, StickyNote, AudioTrack, NoteSection, Comment, WorkspaceImage, CustomKeySounds } from './lib/storage'
+import SpacingPanel from './components/SpacingPanel'
+import GlyphPicker from './components/GlyphPicker'
+import { saveData, loadData, saveAudioTracks, loadAudioTracks, saveWorkspaceImages, loadWorkspaceImages, saveCustomKeySounds, loadCustomKeySounds, saveDocumentToFile, openDocumentFromFile, CustomTheme, StickyNote, AudioTrack, NoteSection, Comment, WorkspaceImage, CustomKeySounds } from './lib/storage'
 import { setCustomSound, previewSound, SoundType } from './lib/keyboardSounds'
 import { FontSize } from './lib/font-size'
 import StickyLayer from './components/StickyLayer'
@@ -55,6 +57,13 @@ function hexToRgba(hex: string, alpha: number): string {
   const g = parseInt(hex.slice(3,5),16)
   const b = parseInt(hex.slice(5,7),16)
   return `rgba(${r},${g},${b},${alpha})`
+}
+
+function getLuminance(hex: string): number {
+  const r = parseInt(hex.slice(1,3),16)/255
+  const g = parseInt(hex.slice(3,5),16)/255
+  const b = parseInt(hex.slice(5,7),16)/255
+  return 0.299*r + 0.587*g + 0.114*b
 }
 
 function darken(hex: string, amt = 0.35): string {
@@ -103,6 +112,7 @@ const [showSettings, setShowSettings]     = useState(false)
   const [timerRunning, setTimerRunning]     = useState(false)
   const [drafts, setDrafts]                 = useState<Record<string, Draft>>({ untitled: { content: '', savedAt: new Date().toISOString() } })
   const [currentDraft, setCurrentDraft]     = useState('untitled')
+  const [currentFilePath, setCurrentFilePath] = useState<string | null>(null)
   const [notes, setNotes]                   = useState('')
   const [accentPresets, setAccentPresets]   = useState<string[]>([])
   const [bgPresets, setBgPresets]           = useState<string[]>([])
@@ -112,6 +122,11 @@ const [showSettings, setShowSettings]     = useState(false)
   const [keySounds, setKeySounds]           = useState(false)
   const [keySoundsVolume, setKeySoundsVolume] = useState(0.3)
   const [customKeySounds, setCustomKeySounds] = useState<CustomKeySounds>({ click: null, space: null, return: null, backspace: null })
+  const [toolbarColor, setToolbarColor]     = useState('')
+  const [toolbarTextColor, setToolbarTextColor] = useState('')
+  const [paragraphSpacing, setParagraphSpacing] = useState(0.8)
+  const [showSpacing, setShowSpacing]       = useState(false)
+  const [showGlyphs, setShowGlyphs]         = useState(false)
   const [autoHideBars, setAutoHideBars]     = useState(false)
   const [barsHovered, setBarsHovered]       = useState(false)
   const [statsBarHovered, setStatsBarHovered] = useState(false)
@@ -174,6 +189,9 @@ setShowFormattingBar(data.settings.showFormattingBar ?? true)
         setImageMode(data.settings.imageMode ?? 'text')
         setKeySounds(data.settings.keySounds ?? false)
         setKeySoundsVolume(data.settings.keySoundsVolume ?? 0.3)
+        setToolbarColor(data.settings.toolbarColor ?? '')
+        setToolbarTextColor(data.settings.toolbarTextColor ?? '')
+        setParagraphSpacing(data.settings.paragraphSpacing ?? 0.8)
       }
       setLoaded(true)
     })
@@ -192,15 +210,19 @@ setShowFormattingBar(data.settings.showFormattingBar ?? true)
   // Theme vars
   useEffect(() => {
     const r = document.documentElement.style
-    r.setProperty('--bg',      bgColor || theme.bg)
-    r.setProperty('--surface', theme.surface)
-    r.setProperty('--text',    theme.text)
-    r.setProperty('--text2',   theme.text2)
-    r.setProperty('--text3',   theme.text3)
-    r.setProperty('--border',  theme.border)
-    r.setProperty('--toolbar', theme.toolbar)
-    r.setProperty('--accent',  accentColor)
-    r.setProperty('--accent2', darken(accentColor))
+    r.setProperty('--bg',           bgColor || theme.bg)
+    r.setProperty('--surface',      theme.surface)
+    r.setProperty('--text',         theme.text)
+    r.setProperty('--text2',        theme.text2)
+    r.setProperty('--text3',        theme.text3)
+    r.setProperty('--border',       theme.border)
+    r.setProperty('--toolbar',      toolbarColor || theme.toolbar)
+    r.setProperty('--toolbar-text', toolbarTextColor || theme.text2)
+    r.setProperty('--accent',       accentColor)
+    r.setProperty('--accent2',      darken(accentColor))
+    const effectiveBg = bgColor || theme.bg
+    const lum = getLuminance(effectiveBg)
+    r.setProperty('--placeholder-color', lum > 0.5 ? 'rgba(0,0,0,0.3)' : 'rgba(255,255,255,0.18)')
     // Background image
     const bgLayer = document.getElementById('folio-bg-layer')
     if (bgLayer) {
@@ -215,13 +237,19 @@ setShowFormattingBar(data.settings.showFormattingBar ?? true)
     }
     const dimLayer = document.getElementById('folio-dim-layer')
     if (dimLayer) dimLayer.style.background = bgImage ? 'rgba(0,0,0,' + bgDim/100 + ')' : 'transparent'
-  }, [themeIdx, accentColor, bgColor, bgImage, bgBlur, bgDim])
+  }, [themeIdx, accentColor, bgColor, bgImage, bgBlur, bgDim, toolbarColor, toolbarTextColor, theme])
 
-  // Font/line-height
+  // Font/line-height — CSS vars apply immediately; setAttribute is a fallback for inline specificity
   useEffect(() => {
-    if (!editor) return
-    editor.view.dom.setAttribute('style', `font-size:${fontSize}px;line-height:${lineHeight};`)
+    const r = document.documentElement.style
+    r.setProperty('--editor-font-size', `${fontSize}px`)
+    r.setProperty('--editor-line-height', lineHeight.toString())
+    if (editor) editor.view.dom.setAttribute('style', `font-size:${fontSize}px;line-height:${lineHeight};`)
   }, [fontSize, lineHeight, editor])
+
+  useEffect(() => {
+    document.documentElement.style.setProperty('--paragraph-spacing', `${paragraphSpacing}em`)
+  }, [paragraphSpacing])
 
 // Audio tracks persistence
   useEffect(() => {
@@ -277,9 +305,9 @@ setShowFormattingBar(data.settings.showFormattingBar ?? true)
     if (!loaded) return
     if (saveTimeout.current) clearTimeout(saveTimeout.current)
     saveTimeout.current = window.setTimeout(() => {
-      saveData({ drafts, currentDraft, notes, notesSections, comments, stickyNotes, settings: { themeIdx, accentColor, bgColor, bgImage, bgBlur, bgDim, fontSize, editorWidth, lineHeight, wordGoal, showFormattingBar, canvasPadding, accentPresets, bgPresets, customThemes, showScrollbar, canvasAlign, spellCheckLang, imageMode, keySounds, keySoundsVolume } })
+      saveData({ drafts, currentDraft, notes, notesSections, comments, stickyNotes, settings: { themeIdx, accentColor, bgColor, bgImage, bgBlur, bgDim, fontSize, editorWidth, lineHeight, wordGoal, showFormattingBar, canvasPadding, accentPresets, bgPresets, customThemes, showScrollbar, canvasAlign, spellCheckLang, imageMode, keySounds, keySoundsVolume, toolbarColor, toolbarTextColor, paragraphSpacing } })
     }, 1500)
-  }, [drafts, currentDraft, notes, themeIdx, accentColor, bgColor, fontSize, editorWidth, lineHeight, wordGoal, loaded])
+  }, [drafts, currentDraft, notes, themeIdx, accentColor, bgColor, fontSize, editorWidth, lineHeight, wordGoal, loaded, toolbarColor, toolbarTextColor, paragraphSpacing])
 
   const toggleFocusMode = useCallback(() => {
     if (!document.fullscreenElement) {
@@ -297,18 +325,6 @@ setShowFormattingBar(data.settings.showFormattingBar ?? true)
     return () => document.removeEventListener('fullscreenchange', handler)
   }, [])
 
-  // Keyboard shortcuts
-  useEffect(() => {
-    const handler = (e: KeyboardEvent) => {
-      if ((e.ctrlKey || e.metaKey) && e.key === 's') { e.preventDefault(); saveDraft() }
-      if ((e.ctrlKey || e.metaKey) && e.key === 'e') { e.preventDefault(); setShowExport(true) }
-      if (e.key === 'Escape') { setShowSettings(false); setShowExport(false) }
-      if (e.key === 'F11') { e.preventDefault(); toggleFocusMode() }
-    }
-    window.addEventListener('keydown', handler)
-    return () => window.removeEventListener('keydown', handler)
-  }, [toggleFocusMode])
-
   const saveDraft = useCallback(() => {
     if (!editor) return
     const updated = { ...drafts, [currentDraft]: { content: editor.getHTML(), savedAt: new Date().toISOString() } }
@@ -316,9 +332,40 @@ setShowFormattingBar(data.settings.showFormattingBar ?? true)
     saveData({ drafts: updated, currentDraft, notes, settings: { themeIdx, accentColor, bgColor, fontSize, editorWidth, lineHeight, wordGoal } })
   }, [editor, currentDraft, drafts, notes, themeIdx, accentColor, bgColor, fontSize, editorWidth, lineHeight, wordGoal])
 
+  const saveToFile = useCallback(async () => {
+    if (!editor) return
+    saveDraft()
+    const path = await saveDocumentToFile(editor.getHTML(), currentDraft, currentFilePath)
+    if (path) setCurrentFilePath(path)
+  }, [editor, currentDraft, currentFilePath, saveDraft])
+
+  const openFile = useCallback(async () => {
+    const result = await openDocumentFromFile()
+    if (!result) return
+    saveDraft()
+    const draftName = result.title
+    setDrafts(d => ({ ...d, [draftName]: { content: result.content, savedAt: new Date().toISOString() } }))
+    setCurrentDraft(draftName)
+    setCurrentFilePath(result.path)
+    editor?.commands.setContent(result.content)
+  }, [editor, saveDraft])
+
+  // Keyboard shortcuts
+  useEffect(() => {
+    const handler = (e: KeyboardEvent) => {
+      if ((e.ctrlKey || e.metaKey) && e.key === 's') { e.preventDefault(); saveToFile() }
+      if ((e.ctrlKey || e.metaKey) && e.key === 'e') { e.preventDefault(); setShowExport(true) }
+      if (e.key === 'Escape') { setShowSettings(false); setShowExport(false) }
+      if (e.key === 'F11') { e.preventDefault(); toggleFocusMode() }
+    }
+    window.addEventListener('keydown', handler)
+    return () => window.removeEventListener('keydown', handler)
+  }, [toggleFocusMode, saveToFile])
+
   const loadDraft = (name: string) => {
     saveDraft()
     setCurrentDraft(name)
+    setCurrentFilePath(null)
     editor?.commands.setContent(drafts[name]?.content || '')
   }
 
@@ -328,6 +375,7 @@ setShowFormattingBar(data.settings.showFormattingBar ?? true)
     saveDraft()
     setDrafts(d => ({ ...d, [name]: { content: '', savedAt: new Date().toISOString() } }))
     setCurrentDraft(name)
+    setCurrentFilePath(null)
     editor?.commands.clearContent()
   }
 
@@ -413,8 +461,9 @@ const handleImageFile = (e: React.ChangeEvent<HTMLInputElement>) => {
         onMouseLeave={() => setBarsHovered(false)}
       >
         <Toolbar
-          currentDraft={currentDraft} focusMode={focusMode} timerRunning={timerRunning}
-          onNew={newDraft} onSave={saveDraft} onExport={() => setShowExport(true)}
+          currentDraft={currentFilePath ? (currentFilePath.split(/[/\\]/).pop()?.replace(/\.folio$/i, '') ?? currentDraft) : currentDraft}
+          focusMode={focusMode} timerRunning={timerRunning}
+          onNew={newDraft} onOpen={openFile} onSave={saveToFile} onExport={() => setShowExport(true)}
           onTogglePanel={() => setShowPanel(p => !p)}
           onToggleFocus={toggleFocusMode}
 onToggleTimer={() => setTimerRunning(r => !r)}
@@ -429,8 +478,25 @@ onToggleTimer={() => setTimerRunning(r => !r)}
           onToggleAutoHideBars={() => setAutoHideBars(a => !a)}
           imageMode={imageMode}
           onToggleImageMode={() => setImageMode(m => m === 'text' ? 'workspace' : 'text')}
+          showSpacing={showSpacing} onToggleSpacing={() => { setShowSpacing(s => !s); setShowGlyphs(false) }}
+          showGlyphs={showGlyphs}  onToggleGlyphs={() => { setShowGlyphs(g => !g); setShowSpacing(false) }}
         />
         <FormattingBar editor={editor} visible={showFormattingBar} />
+        {showSpacing && (
+          <SpacingPanel
+            lineHeight={lineHeight} onLineHeight={setLineHeight}
+            paragraphSpacing={paragraphSpacing} onParagraphSpacing={setParagraphSpacing}
+            topOffset={showFormattingBar ? 82 : 46}
+            onClose={() => setShowSpacing(false)}
+          />
+        )}
+        {showGlyphs && (
+          <GlyphPicker
+            onInsert={char => editor?.commands.insertContent(char)}
+            topOffset={showFormattingBar ? 82 : 46}
+            onClose={() => setShowGlyphs(false)}
+          />
+        )}
       </div>
       {autoHideBars && !barsHovered && (
         <div
@@ -538,6 +604,8 @@ WebkitBackdropFilter: canvasBlur > 0 ? 'blur(' + canvasBlur + 'px)' : undefined,
         customKeySounds={customKeySounds}
         onCustomKeySound={(type, url) => setCustomKeySounds(s => ({ ...s, [type]: url }))}
         onPreviewSound={(type) => previewSound(type, keySoundsVolume)}
+        toolbarColor={toolbarColor} onToolbarColor={setToolbarColor}
+        toolbarTextColor={toolbarTextColor} onToolbarTextColor={setToolbarTextColor}
       />
       <ExportModal
         open={showExport}
