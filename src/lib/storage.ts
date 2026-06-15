@@ -106,9 +106,32 @@ export async function openDocumentFromFile(): Promise<{ path: string; content: s
   }
 }
 
+export interface IdeationNote {
+  id: string
+  content: string
+  x: number
+  y: number
+  color: string
+  fontSize: number
+  fontFamily: string
+  rotation: number
+  width: number
+  zIndex?: number
+}
+
+export interface Block {
+  id: string
+  content: string
+  headingLevel?: 1 | 2 | 3
+}
+
 interface Draft {
   content: string
   savedAt?: string
+  stage?: 1 | 2 | 3
+  ideationNotes?: IdeationNote[]
+  blocks?: Block[]
+  stageFont?: string
 }
 
 export interface StickyNote {
@@ -169,6 +192,8 @@ interface FolioData {
     toolbarColor?: string
     toolbarTextColor?: string
     paragraphSpacing?: number
+    postureEnabled?: boolean
+    postureInterval?: number
   }
 }
 
@@ -230,6 +255,7 @@ export interface WorkspaceImage {
   alt?: string
   x: number
   y: number
+  documentY: number | null  // null = viewport-fixed, number = pinned to scroll position
   width: number
 }
 

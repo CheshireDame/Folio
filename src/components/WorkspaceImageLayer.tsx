@@ -3,15 +3,25 @@ import type { WorkspaceImage } from '../lib/storage'
 
 const SIZES = [150, 250, 350, 500, 700]
 
-function ImageCard({ img, selected, onMouseDown, onUpdate, onRemove }: {
+function ImageCard({ img, selected, scrollTop, onMouseDown, onUpdate, onRemove }: {
   img: WorkspaceImage
   selected: boolean
+  scrollTop: number
   onMouseDown: (e: React.MouseEvent) => void
   onUpdate: (patch: Partial<WorkspaceImage>) => void
   onRemove: () => void
 }) {
   const [hovered, setHovered] = useState(false)
   const active = selected || hovered
+  const pinned = img.documentY !== null
+
+  const togglePin = () => {
+    if (pinned) {
+      onUpdate({ documentY: null, y: img.documentY! - scrollTop })
+    } else {
+      onUpdate({ documentY: img.y + scrollTop })
+    }
+  }
 
   return (
     <div
@@ -56,6 +66,17 @@ function ImageCard({ img, selected, onMouseDown, onUpdate, onRemove }: {
           ))}
           <div style={{ width: 1, height: 12, background: 'rgba(255,255,255,0.15)', margin: '0 2px' }} />
           <button
+            onMouseDown={e => { e.preventDefault(); e.stopPropagation(); togglePin() }}
+            title={pinned ? 'Unpin — image will stay in viewport' : 'Pin — image scrolls with content'}
+            style={{
+              background: pinned ? 'rgba(196,168,130,0.2)' : 'none',
+              border: 'none', color: pinned ? '#c4a882' : '#e8e2d9',
+              cursor: 'pointer', padding: '2px 5px', borderRadius: 3,
+              fontSize: 10, fontFamily: '"JetBrains Mono", monospace',
+            }}
+          >{pinned ? '📌' : '📍'}</button>
+          <div style={{ width: 1, height: 12, background: 'rgba(255,255,255,0.15)', margin: '0 2px' }} />
+          <button
             onMouseDown={e => { e.preventDefault(); e.stopPropagation(); onRemove() }}
             style={{ background: 'none', border: 'none', color: '#e8e2d9', cursor: 'pointer', padding: '2px 5px', borderRadius: 3, fontSize: 10, fontFamily: '"JetBrains Mono", monospace' }}
           >✕</button>
@@ -67,30 +88,56 @@ function ImageCard({ img, selected, onMouseDown, onUpdate, onRemove }: {
 
 interface Props {
   images: WorkspaceImage[]
+  scrollTop: number
   onChange: (images: WorkspaceImage[]) => void
 }
 
-export default function WorkspaceImageLayer({ images, onChange }: Props) {
+export default function WorkspaceImageLayer({ images, scrollTop, onChange }: Props) {
   const imgsRef = useRef(images)
-  const dragRef = useRef<{ id: string; startX: number; startY: number; origX: number; origY: number } | null>(null)
+  const scrollRef = useRef(scrollTop)
+  const dragRef = useRef<{ id: string; startX: number; startY: number; origX: number; origViewY: number } | null>(null)
   const [selectedId, setSelectedId] = useState<string | null>(null)
   const selectedIdRef = useRef<string | null>(null)
 
   useEffect(() => { imgsRef.current = images }, [images])
+  useEffect(() => { scrollRef.current = scrollTop }, [scrollTop])
   useEffect(() => { selectedIdRef.current = selectedId }, [selectedId])
 
-  // Drag
   useEffect(() => {
     const onMove = (e: MouseEvent) => {
       const d = dragRef.current
       if (!d) return
-      onChange(imgsRef.current.map(img =>
-        img.id === d.id
-          ? { ...img, x: d.origX + e.clientX - d.startX, y: d.origY + e.clientY - d.startY }
-          : img
-      ))
+      const dx = e.clientX - d.startX
+      const dy = e.clientY - d.startY
+      onChange(imgsRef.current.map(img => {
+        if (img.id !== d.id) return img
+        const newX = d.origX + dx
+        const newViewY = d.origViewY + dy
+        return img.documentY !== null
+          ? { ...img, x: newX, documentY: newViewY + scrollRef.current }
+          : { ...img, x: newX, y: newViewY }
+      }))
     }
-    const onUp = () => { dragRef.current = null }
+    const onUp = (e: MouseEvent) => {
+      const d = dragRef.current
+      if (d) {
+        // Clamp so at least 60px of the image remains visible on screen
+        const MARGIN = 60
+        onChange(imgsRef.current.map(img => {
+          if (img.id !== d.id) return img
+          const clampedX = Math.max(-img.width + MARGIN, Math.min(window.innerWidth - MARGIN, img.x))
+          if (img.documentY !== null) {
+            const displayY = img.documentY - scrollRef.current
+            const clampedDocY = Math.max(-(img.width) + MARGIN, displayY + scrollRef.current)
+            return { ...img, x: clampedX, documentY: clampedDocY }
+          }
+          const clampedY = Math.max(-40, Math.min(window.innerHeight - MARGIN, img.y))
+          return { ...img, x: clampedX, y: clampedY }
+        }))
+      }
+      dragRef.current = null
+      void e
+    }
     document.addEventListener('mousemove', onMove)
     document.addEventListener('mouseup', onUp)
     return () => {
@@ -99,7 +146,6 @@ export default function WorkspaceImageLayer({ images, onChange }: Props) {
     }
   }, [onChange])
 
-  // Delete selected image with Delete or Backspace
   useEffect(() => {
     const handler = (e: KeyboardEvent) => {
       if ((e.key === 'Delete' || e.key === 'Backspace') && selectedIdRef.current) {
@@ -112,7 +158,6 @@ export default function WorkspaceImageLayer({ images, onChange }: Props) {
     return () => window.removeEventListener('keydown', handler)
   }, [onChange])
 
-  // Click outside any image clears selection
   useEffect(() => {
     const handler = (e: MouseEvent) => {
       if (!(e.target as Element).closest('[data-ws-image]')) setSelectedId(null)
@@ -123,20 +168,24 @@ export default function WorkspaceImageLayer({ images, onChange }: Props) {
 
   return (
     <div style={{ position: 'absolute', inset: 0, pointerEvents: 'none', zIndex: 145 }}>
-      {images.map(img => (
-        <ImageCard
-          key={img.id}
-          img={img}
-          selected={selectedId === img.id}
-          onMouseDown={e => {
-            e.stopPropagation()
-            setSelectedId(img.id)
-            dragRef.current = { id: img.id, startX: e.clientX, startY: e.clientY, origX: img.x, origY: img.y }
-          }}
-          onUpdate={patch => onChange(imgsRef.current.map(i => i.id === img.id ? { ...i, ...patch } : i))}
-          onRemove={() => { onChange(images.filter(i => i.id !== img.id)); setSelectedId(null) }}
-        />
-      ))}
+      {images.map(img => {
+        const displayY = img.documentY !== null ? img.documentY - scrollTop : img.y
+        return (
+          <ImageCard
+            key={img.id}
+            img={{ ...img, y: displayY }}
+            selected={selectedId === img.id}
+            scrollTop={scrollTop}
+            onMouseDown={e => {
+              e.stopPropagation()
+              setSelectedId(img.id)
+              dragRef.current = { id: img.id, startX: e.clientX, startY: e.clientY, origX: img.x, origViewY: displayY }
+            }}
+            onUpdate={patch => onChange(imgsRef.current.map(i => i.id === img.id ? { ...i, ...patch } : i))}
+            onRemove={() => { onChange(images.filter(i => i.id !== img.id)); setSelectedId(null) }}
+          />
+        )
+      })}
     </div>
   )
 }

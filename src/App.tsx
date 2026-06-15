@@ -24,12 +24,17 @@ import FormattingBar from './components/FormattingBar'
 import SpacingPanel from './components/SpacingPanel'
 import GlyphPicker from './components/GlyphPicker'
 import { saveData, loadData, saveAudioTracks, loadAudioTracks, saveWorkspaceImages, loadWorkspaceImages, saveCustomKeySounds, loadCustomKeySounds, saveDocumentToFile, openDocumentFromFile, CustomTheme, StickyNote, AudioTrack, NoteSection, Comment, WorkspaceImage, CustomKeySounds } from './lib/storage'
+import type { Draft as DraftType, Block } from './lib/storage'
 import { setCustomSound, previewSound, SoundType } from './lib/keyboardSounds'
 import { FontSize } from './lib/font-size'
 import StickyLayer from './components/StickyLayer'
 import WorkspaceImageLayer from './components/WorkspaceImageLayer'
 import AudioPlayer from './components/AudioPlayer'
 import ExportModal from './components/ExportModal'
+import TimerPopup from './components/TimerPopup'
+import PostureToast from './components/PostureToast'
+import IdeationCanvas, { makeIdeationNote } from './components/IdeationCanvas'
+import BlockEditor from './components/BlockEditor'
 import './App.css'
 
 const TabHandler = Extension.create({
@@ -49,8 +54,6 @@ const THEMES = [
   { name: 'Forest', bg: '#1a1f1a', surface: '#1f261f', text: '#d4e4d4', text2: '#8aaa8a', text3: '#5a7a5a', border: '#2e3d2e', toolbar: '#151a15', accent: '#90b090' },
   { name: 'Dusk',   bg: '#1e1a26', surface: '#261f33', text: '#e4daf0', text2: '#9d8fb0', text3: '#6a5f7a', border: '#3a2f50', toolbar: '#17131f', accent: '#b0a0d0' },
 ]
-
-interface Draft { content: string; savedAt?: string }
 
 function hexToRgba(hex: string, alpha: number): string {
   const r = parseInt(hex.slice(1,3),16)
@@ -110,7 +113,7 @@ const [showSettings, setShowSettings]     = useState(false)
   const [wordGoal, setWordGoal]             = useState(500)
   const [timer, setTimer]                   = useState(0)
   const [timerRunning, setTimerRunning]     = useState(false)
-  const [drafts, setDrafts]                 = useState<Record<string, Draft>>({ untitled: { content: '', savedAt: new Date().toISOString() } })
+  const [drafts, setDrafts]                 = useState<Record<string, DraftType>>({ untitled: { content: '', savedAt: new Date().toISOString() } })
   const [currentDraft, setCurrentDraft]     = useState('untitled')
   const [currentFilePath, setCurrentFilePath] = useState<string | null>(null)
   const [notes, setNotes]                   = useState('')
@@ -118,7 +121,7 @@ const [showSettings, setShowSettings]     = useState(false)
   const [bgPresets, setBgPresets]           = useState<string[]>([])
   const [customThemes, setCustomThemes]     = useState<CustomTheme[]>([])
   const [workspaceImages, setWorkspaceImages] = useState<WorkspaceImage[]>([])
-  const [imageMode, setImageMode]           = useState<'text' | 'workspace'>('text')
+  const [imageMode, setImageMode]           = useState<'text' | 'workspace'>('workspace')
   const [keySounds, setKeySounds]           = useState(false)
   const [keySoundsVolume, setKeySoundsVolume] = useState(0.3)
   const [customKeySounds, setCustomKeySounds] = useState<CustomKeySounds>({ click: null, space: null, return: null, backspace: null })
@@ -130,6 +133,14 @@ const [showSettings, setShowSettings]     = useState(false)
   const [autoHideBars, setAutoHideBars]     = useState(false)
   const [barsHovered, setBarsHovered]       = useState(false)
   const [statsBarHovered, setStatsBarHovered] = useState(false)
+  const [zoom, setZoom]                     = useState(1)
+  const [showTimer, setShowTimer]           = useState(false)
+  const [showConvertPrompt, setShowConvertPrompt] = useState(false)
+  const [showBuildPrompt, setShowBuildPrompt]     = useState(false)
+  const [pendingStage, setPendingStage]           = useState<1 | 2 | 3 | null>(null)
+  const [postureEnabled, setPostureEnabled] = useState(false)
+  const [postureInterval, setPostureInterval] = useState(30)
+  const [showPosture, setShowPosture]       = useState(false)
 
   const timerRef      = useRef<number | null>(null)
   const imageInputRef = useRef<HTMLInputElement>(null)
@@ -192,6 +203,8 @@ setShowFormattingBar(data.settings.showFormattingBar ?? true)
         setToolbarColor(data.settings.toolbarColor ?? '')
         setToolbarTextColor(data.settings.toolbarTextColor ?? '')
         setParagraphSpacing(data.settings.paragraphSpacing ?? 0.8)
+        setPostureEnabled(data.settings.postureEnabled ?? false)
+        setPostureInterval(data.settings.postureInterval ?? 30)
       }
       setLoaded(true)
     })
@@ -305,7 +318,7 @@ setShowFormattingBar(data.settings.showFormattingBar ?? true)
     if (!loaded) return
     if (saveTimeout.current) clearTimeout(saveTimeout.current)
     saveTimeout.current = window.setTimeout(() => {
-      saveData({ drafts, currentDraft, notes, notesSections, comments, stickyNotes, settings: { themeIdx, accentColor, bgColor, bgImage, bgBlur, bgDim, fontSize, editorWidth, lineHeight, wordGoal, showFormattingBar, canvasPadding, accentPresets, bgPresets, customThemes, showScrollbar, canvasAlign, spellCheckLang, imageMode, keySounds, keySoundsVolume, toolbarColor, toolbarTextColor, paragraphSpacing } })
+      saveData({ drafts, currentDraft, notes, notesSections, comments, stickyNotes, settings: { themeIdx, accentColor, bgColor, bgImage, bgBlur, bgDim, fontSize, editorWidth, lineHeight, wordGoal, showFormattingBar, canvasPadding, accentPresets, bgPresets, customThemes, showScrollbar, canvasAlign, spellCheckLang, imageMode, keySounds, keySoundsVolume, toolbarColor, toolbarTextColor, paragraphSpacing, postureEnabled, postureInterval } })
     }, 1500)
   }, [drafts, currentDraft, notes, themeIdx, accentColor, bgColor, fontSize, editorWidth, lineHeight, wordGoal, loaded, toolbarColor, toolbarTextColor, paragraphSpacing])
 
@@ -324,6 +337,57 @@ setShowFormattingBar(data.settings.showFormattingBar ?? true)
     document.addEventListener('fullscreenchange', handler)
     return () => document.removeEventListener('fullscreenchange', handler)
   }, [])
+
+  // --- Stage system ---
+  const currentDraftData = drafts[currentDraft] ?? { content: '' }
+  const currentStage     = (currentDraftData.stage ?? 3) as 1 | 2 | 3
+  const ideationNotes    = (currentDraftData as DraftType).ideationNotes ?? []
+  const blocks           = (currentDraftData as DraftType).blocks ?? []
+  const stageFont        = (currentDraftData as DraftType).stageFont ?? ''
+
+  const patchDraft = useCallback((patch: Partial<DraftType>) => {
+    setDrafts(d => ({ ...d, [currentDraft]: { ...d[currentDraft], ...patch } }))
+  }, [currentDraft])
+
+  const handleStageChange = useCallback((s: 1 | 2 | 3) => {
+    const draft = drafts[currentDraft] as DraftType
+    if (s === 2 && currentStage === 1 && !(draft.blocks?.length)) {
+      setPendingStage(2)
+      setShowConvertPrompt(true)
+      return
+    }
+    if (s === 3 && currentStage === 2 && !draft.content) {
+      setPendingStage(3)
+      setShowBuildPrompt(true)
+      return
+    }
+    patchDraft({ stage: s })
+  }, [drafts, currentDraft, currentStage, patchDraft])
+
+  const handleConvert = useCallback(() => {
+    const draft = drafts[currentDraft] as DraftType
+    const sorted = [...(draft.ideationNotes ?? [])].sort((a, b) => a.y - b.y)
+    const newBlocks: Block[] = sorted.map(n => ({ id: n.id, content: n.content }))
+    patchDraft({ blocks: newBlocks, stage: pendingStage ?? 2 })
+    setShowConvertPrompt(false)
+    setPendingStage(null)
+  }, [drafts, currentDraft, patchDraft, pendingStage])
+
+  const handleBuild = useCallback(() => {
+    const draft = drafts[currentDraft] as DraftType
+    const html = (draft.blocks ?? []).map(b => {
+      const text = b.content.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')
+      if (b.headingLevel === 1) return `<h1>${text}</h1>`
+      if (b.headingLevel === 2) return `<h2>${text}</h2>`
+      if (b.headingLevel === 3) return `<h3>${text}</h3>`
+      return `<p>${text}</p>`
+    }).join('')
+    editor?.commands.setContent(html)
+    if (draft.stageFont) editor?.chain().focus().setFontFamily(draft.stageFont).run()
+    patchDraft({ content: html, stage: pendingStage ?? 3 })
+    setShowBuildPrompt(false)
+    setPendingStage(null)
+  }, [drafts, currentDraft, editor, patchDraft, pendingStage])
 
   const saveDraft = useCallback(() => {
     if (!editor) return
@@ -357,10 +421,29 @@ setShowFormattingBar(data.settings.showFormattingBar ?? true)
       if ((e.ctrlKey || e.metaKey) && e.key === 'e') { e.preventDefault(); setShowExport(true) }
       if (e.key === 'Escape') { setShowSettings(false); setShowExport(false) }
       if (e.key === 'F11') { e.preventDefault(); toggleFocusMode() }
+      if ((e.ctrlKey || e.metaKey) && e.key === '0') { e.preventDefault(); setZoom(1) }
     }
     window.addEventListener('keydown', handler)
     return () => window.removeEventListener('keydown', handler)
   }, [toggleFocusMode, saveToFile])
+
+  // Ctrl+scroll zoom
+  useEffect(() => {
+    const handler = (e: WheelEvent) => {
+      if (!e.ctrlKey && !e.metaKey) return
+      e.preventDefault()
+      setZoom(z => Math.min(3, Math.max(0.3, z - e.deltaY * 0.001)))
+    }
+    window.addEventListener('wheel', handler, { passive: false })
+    return () => window.removeEventListener('wheel', handler)
+  }, [])
+
+  // Posture reminder
+  useEffect(() => {
+    if (!postureEnabled) return
+    const id = window.setInterval(() => setShowPosture(true), postureInterval * 60 * 1000)
+    return () => clearInterval(id)
+  }, [postureEnabled, postureInterval])
 
   const loadDraft = (name: string) => {
     saveDraft()
@@ -416,6 +499,7 @@ const handleImageFile = (e: React.ChangeEvent<HTMLInputElement>) => {
           src, alt: file.name,
           x: ws ? ws.offsetWidth / 2 - 150 : 200,
           y: ws ? ws.offsetHeight / 2 - 100 : 100,
+          documentY: null,
           width: 300,
         }])
       } else {
@@ -462,11 +546,11 @@ const handleImageFile = (e: React.ChangeEvent<HTMLInputElement>) => {
       >
         <Toolbar
           currentDraft={currentFilePath ? (currentFilePath.split(/[/\\]/).pop()?.replace(/\.folio$/i, '') ?? currentDraft) : currentDraft}
-          focusMode={focusMode} timerRunning={timerRunning}
+          focusMode={focusMode} timerRunning={timerRunning} timerOpen={showTimer}
           onNew={newDraft} onOpen={openFile} onSave={saveToFile} onExport={() => setShowExport(true)}
           onTogglePanel={() => setShowPanel(p => !p)}
           onToggleFocus={toggleFocusMode}
-onToggleTimer={() => setTimerRunning(r => !r)}
+          onToggleTimer={() => setShowTimer(t => !t)}
           onOpenSettings={() => setShowSettings(true)}
           onImage={() => imageInputRef.current?.click()}
           onToggleFormattingBar={() => setShowFormattingBar(f => !f)}
@@ -480,6 +564,7 @@ onToggleTimer={() => setTimerRunning(r => !r)}
           onToggleImageMode={() => setImageMode(m => m === 'text' ? 'workspace' : 'text')}
           showSpacing={showSpacing} onToggleSpacing={() => { setShowSpacing(s => !s); setShowGlyphs(false) }}
           showGlyphs={showGlyphs}  onToggleGlyphs={() => { setShowGlyphs(g => !g); setShowSpacing(false) }}
+          currentStage={currentStage} onStageChange={handleStageChange}
         />
         <FormattingBar editor={editor} visible={showFormattingBar} />
         {showSpacing && (
@@ -504,10 +589,52 @@ onToggleTimer={() => setTimerRunning(r => !r)}
           onMouseEnter={() => setBarsHovered(true)}
         />
       )}
-      <div ref={workspaceRef} style={{ display: 'flex', flex: 1, overflow: 'hidden', position: 'relative' }}>
+      <div
+        ref={workspaceRef}
+        style={{ display: 'flex', flex: 1, overflow: 'hidden', position: 'relative', transform: `scale(${zoom})`, transformOrigin: 'center top', transition: 'transform 0.1s ease' }}
+        onDragOver={e => e.preventDefault()}
+        onDrop={e => {
+          e.preventDefault()
+          const file = Array.from(e.dataTransfer.files).find(f => f.type.startsWith('image/'))
+          if (!file) return
+          const rect = (e.currentTarget as HTMLDivElement).getBoundingClientRect()
+          const dropX = (e.clientX - rect.left) / zoom
+          const dropY = (e.clientY - rect.top) / zoom
+          const reader = new FileReader()
+          reader.onload = ev => {
+            const src = ev.target?.result as string
+            if (imageMode === 'workspace') {
+              setWorkspaceImages(imgs => [...imgs, { id: Date.now().toString(), src, alt: file.name, x: dropX - 150, y: dropY - 100, documentY: null, width: 300 }])
+            } else {
+              editor?.chain().focus().insertContent({ type: 'image', attrs: { src, alt: file.name, width: '100%', layout: 'block' } }).run()
+            }
+          }
+          reader.readAsDataURL(file)
+        }}
+      >
         <div style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: canvasAlign === 'left' ? 'flex-start' : canvasAlign === 'right' ? 'flex-end' : 'center', overflow: 'hidden', padding: '20px 48px' }} onClick={() => { if (focusMode && document.fullscreenElement) document.exitFullscreen() }}>
-          <div ref={canvasRef} className={canvasBlur > 0 ? 'folio-canvas-blur' : ''} style={{ width: '100%', maxWidth: editorWidth, flex: 1, position: 'relative', background: canvasBg === 'transparent' && canvasBlur > 0 ? 'rgba(0,0,0,0.01)' : canvasBg === 'transparent' ? 'transparent' : hexToRgba(canvasBg, canvasOpacity / 100), backdropFilter: canvasBlur > 0 ? 'blur(' + canvasBlur + 'px)' : undefined,
+          <div ref={canvasRef} className={canvasBlur > 0 ? 'folio-canvas-blur' : ''} style={{ width: '100%', maxWidth: currentStage === 1 ? '100%' : editorWidth, flex: 1, position: 'relative', background: canvasBg === 'transparent' && canvasBlur > 0 ? 'rgba(0,0,0,0.01)' : canvasBg === 'transparent' ? 'transparent' : hexToRgba(canvasBg, canvasOpacity / 100), backdropFilter: canvasBlur > 0 ? 'blur(' + canvasBlur + 'px)' : undefined,
 WebkitBackdropFilter: canvasBlur > 0 ? 'blur(' + canvasBlur + 'px)' : undefined, boxShadow: shadowOpacity > 0 ? '0 0 ' + shadowRange + 'px rgba(' + parseInt(shadowColor.slice(1,3),16) + ',' + parseInt(shadowColor.slice(3,5),16) + ',' + parseInt(shadowColor.slice(5,7),16) + ',' + shadowOpacity/100 + ')' : undefined, borderRadius: shadowOpacity > 0 || canvasBg !== 'transparent' ? 8 : 0, transition: 'all 0.3s' }}>
+            {currentStage === 1 && (
+              <IdeationCanvas
+                notes={ideationNotes}
+                onChange={notes => patchDraft({ ideationNotes: notes })}
+                onAdd={() => {
+                  const ws = workspaceRef.current
+                  patchDraft({ ideationNotes: [...ideationNotes, makeIdeationNote(ws?.offsetWidth ?? 600, ws?.offsetHeight ?? 400)] })
+                }}
+              />
+            )}
+            {currentStage === 2 && (
+              <BlockEditor
+                blocks={blocks}
+                stageFont={stageFont}
+                onChange={b => patchDraft({ blocks: b })}
+                onFontChange={f => patchDraft({ stageFont: f })}
+                onBuildDocument={() => { setPendingStage(3); setShowBuildPrompt(true) }}
+              />
+            )}
+            {currentStage === 3 && (
             <div ref={editorWrapRef} className={`folio-editor-wrap${showScrollbar ? ' scrollbar-visible' : ''}`} style={{ position: 'absolute', top: canvasPadding, right: canvasPadding, bottom: canvasPadding, left: canvasPadding, overflowY: 'auto',  }} onScroll={e => setEditorScrollTop((e.currentTarget as HTMLDivElement).scrollTop)}>
               <EditorContent editor={editor} />
               <BubbleToolbar editor={editor} onTriggerComment={() => setTriggerComment(true)} />
@@ -520,6 +647,7 @@ WebkitBackdropFilter: canvasBlur > 0 ? 'blur(' + canvasBlur + 'px)' : undefined,
                 onTriggerHandled={() => setTriggerComment(false)}
               />
             </div>
+            )}
           </div>
         </div>
         <SidePanel
@@ -534,7 +662,7 @@ WebkitBackdropFilter: canvasBlur > 0 ? 'blur(' + canvasBlur + 'px)' : undefined,
           onDeleteDraft={deleteDraft}
         />
         <StickyLayer notes={stickyNotes} scrollTop={editorScrollTop} onChange={setStickyNotes} />
-        <WorkspaceImageLayer images={workspaceImages} onChange={setWorkspaceImages} />
+        <WorkspaceImageLayer images={workspaceImages} scrollTop={editorScrollTop} onChange={setWorkspaceImages} />
       </div>
       <div
         style={{
@@ -552,12 +680,47 @@ WebkitBackdropFilter: canvasBlur > 0 ? 'blur(' + canvasBlur + 'px)' : undefined,
       >
         <StatsBar
           words={words} chars={chars} wordGoal={wordGoal}
-          timer={timer} timerRunning={timerRunning} focusMode={focusMode}
+          timer={timer} timerRunning={timerRunning} timerPopupOpen={showTimer} focusMode={focusMode}
           onTimerToggle={() => setTimerRunning(r => !r)}
           onTimerReset={() => { setTimerRunning(false); setTimer(0) }}
           onGoalChange={setWordGoal}
         />
       </div>
+      {showTimer && (
+        <TimerPopup
+          timer={timer} running={timerRunning}
+          onToggle={() => setTimerRunning(r => !r)}
+          onReset={() => { setTimerRunning(false); setTimer(0) }}
+          onClose={() => setShowTimer(false)}
+        />
+      )}
+      {showPosture && <PostureToast onDismiss={() => setShowPosture(false)} />}
+
+      {/* Stage conversion prompts */}
+      {(showConvertPrompt || showBuildPrompt) && (
+        <div style={{ position: 'fixed', inset: 0, zIndex: 600, display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'rgba(0,0,0,0.45)' }}>
+          <div style={{ background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 12, padding: '28px 32px', maxWidth: 380, width: '90%', boxShadow: '0 12px 48px rgba(0,0,0,0.7)' }}>
+            <div style={{ fontFamily: '"JetBrains Mono", monospace', fontSize: 10, textTransform: 'uppercase', letterSpacing: '0.1em', color: 'var(--text3)', marginBottom: 12 }}>
+              {showConvertPrompt ? 'Stage 1 → 2' : 'Stage 2 → 3'}
+            </div>
+            <p style={{ fontFamily: '"Crimson Pro", Georgia, serif', fontSize: 16, color: 'var(--text)', lineHeight: 1.6, margin: '0 0 24px' }}>
+              {showConvertPrompt
+                ? 'Sort your ideas top-to-bottom and turn them into blocks? Your notes will still be here if you come back.'
+                : 'Build your document from these blocks? The current draft will be replaced with the block content.'}
+            </p>
+            <div style={{ display: 'flex', gap: 10, justifyContent: 'flex-end' }}>
+              <button
+                onClick={() => { setShowConvertPrompt(false); setShowBuildPrompt(false); setPendingStage(null) }}
+                style={{ padding: '8px 18px', background: 'none', border: '1px solid var(--border)', borderRadius: 6, color: 'var(--text2)', cursor: 'pointer', fontFamily: '"JetBrains Mono", monospace', fontSize: 11, textTransform: 'uppercase', letterSpacing: '0.07em' }}
+              >Cancel</button>
+              <button
+                onClick={showConvertPrompt ? handleConvert : handleBuild}
+                style={{ padding: '8px 18px', background: 'var(--accent)', border: 'none', borderRadius: 6, color: 'var(--bg)', cursor: 'pointer', fontFamily: '"JetBrains Mono", monospace', fontSize: 11, textTransform: 'uppercase', letterSpacing: '0.07em' }}
+              >{showConvertPrompt ? 'Convert' : 'Build'}</button>
+            </div>
+          </div>
+        </div>
+      )}
       {autoHideBars && !statsBarHovered && (
         <div
           style={{ position: 'fixed', bottom: 0, left: 0, right: 0, height: 8, zIndex: 201 }}
@@ -606,6 +769,8 @@ WebkitBackdropFilter: canvasBlur > 0 ? 'blur(' + canvasBlur + 'px)' : undefined,
         onPreviewSound={(type) => previewSound(type, keySoundsVolume)}
         toolbarColor={toolbarColor} onToolbarColor={setToolbarColor}
         toolbarTextColor={toolbarTextColor} onToolbarTextColor={setToolbarTextColor}
+        postureEnabled={postureEnabled} onPostureEnabled={setPostureEnabled}
+        postureInterval={postureInterval} onPostureInterval={setPostureInterval}
       />
       <ExportModal
         open={showExport}

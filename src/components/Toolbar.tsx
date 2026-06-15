@@ -2,6 +2,7 @@ interface ToolbarProps {
   currentDraft: string
   focusMode: boolean
   timerRunning: boolean
+  timerOpen: boolean
   onNew: () => void
   onOpen: () => void
   onSave: () => void
@@ -24,15 +25,18 @@ interface ToolbarProps {
   onToggleSpacing: () => void
   showGlyphs: boolean
   onToggleGlyphs: () => void
+  currentStage: 1 | 2 | 3
+  onStageChange: (s: 1 | 2 | 3) => void
 }
 
 export default function Toolbar({
-  currentDraft, focusMode, timerRunning,
+  currentDraft, focusMode, timerRunning, timerOpen,
   onNew, onOpen, onSave, onExport, onTogglePanel,
   onToggleFocus, onToggleTimer,
   onOpenSettings, onImage, onToggleFormattingBar: _ftb, showFormattingBar: _sfb, onNewNote,
   onToggleAudio, audioOpen, autoHideBars, onToggleAutoHideBars, imageMode, onToggleImageMode,
   showSpacing, onToggleSpacing, showGlyphs, onToggleGlyphs,
+  currentStage, onStageChange,
 }: ToolbarProps) {
 
   const btn = (label: string, action: () => void, active = false, title?: string) => (
@@ -97,11 +101,23 @@ export default function Toolbar({
       {btn('Spacing', onToggleSpacing, showSpacing)}
       {btn('Glyphs', onToggleGlyphs, showGlyphs)}
       {sep()}
-      {btn('Image', onImage)}
-      {btn(imageMode === 'text' ? '→text' : '→ws', onToggleImageMode, false,
-        imageMode === 'text'
-          ? 'Images insert into the text flow. Click to switch to workspace mode (free-floating).'
-          : 'Images are placed as free-floating objects on the workspace. Click to switch to text mode.')}
+      <div style={{ display: 'flex', alignItems: 'center', border: '1px solid var(--border)', borderRadius: 4, overflow: 'hidden', flexShrink: 0 }}>
+        <button
+          onClick={onImage}
+          title="Insert image"
+          style={{ background: 'none', border: 'none', color: 'var(--toolbar-text)', cursor: 'pointer', padding: '5px 8px', fontSize: 11, fontFamily: '"JetBrains Mono", monospace', textTransform: 'uppercase', letterSpacing: '0.07em', whiteSpace: 'nowrap' }}
+          onMouseOver={e => e.currentTarget.style.color = 'var(--text)'}
+          onMouseOut={e => e.currentTarget.style.color = 'var(--toolbar-text)'}
+        >Image</button>
+        <div style={{ width: 1, height: 16, background: 'var(--border)' }} />
+        <button
+          onClick={onToggleImageMode}
+          title={imageMode === 'text' ? 'Inline — image inserts into text. Click to switch to Workspace.' : 'Workspace — image floats freely. Click to switch to Inline.'}
+          style={{ background: 'none', border: 'none', color: 'var(--accent)', cursor: 'pointer', padding: '5px 7px', fontSize: 10, fontFamily: '"JetBrains Mono", monospace', textTransform: 'uppercase', letterSpacing: '0.07em', whiteSpace: 'nowrap' }}
+          onMouseOver={e => e.currentTarget.style.opacity = '0.7'}
+          onMouseOut={e => e.currentTarget.style.opacity = '1'}
+        >{imageMode === 'text' ? 'Inline' : 'Workspace'}</button>
+      </div>
       {sep()}
       {btn('Note', onNewNote)}
       {btn('Audio', onToggleAudio, audioOpen)}
@@ -109,7 +125,34 @@ export default function Toolbar({
       {btn('Panel', onTogglePanel)}
       {btn('Focus', onToggleFocus, focusMode)}
       {btn('Autohide', onToggleAutoHideBars, autoHideBars)}
-      {btn('Timer', onToggleTimer, timerRunning)}
+      {btn('Timer', onToggleTimer, timerOpen || timerRunning)}
+      {sep()}
+      {sep()}
+      <div style={{ display: 'flex', border: '1px solid var(--border)', borderRadius: 4, overflow: 'hidden', flexShrink: 0 }}>
+        {([1, 2, 3] as const).map((s, i) => {
+          const labels = ['1·Idea', '2·Org', '3·Write']
+          const active = currentStage === s
+          return (
+            <button
+              key={s}
+              onClick={() => onStageChange(s)}
+              title={['Ideation — scatter your ideas', 'Organize — arrange into blocks', 'Write — clean editor mode'][i]}
+              style={{
+                background: active ? 'rgba(196,168,130,0.18)' : 'none',
+                border: 'none',
+                borderLeft: i > 0 ? '1px solid var(--border)' : 'none',
+                color: active ? 'var(--accent)' : 'var(--toolbar-text)',
+                cursor: 'pointer', padding: '5px 9px',
+                fontSize: 10, fontFamily: '"JetBrains Mono", monospace',
+                textTransform: 'uppercase', letterSpacing: '0.07em',
+                whiteSpace: 'nowrap', transition: 'color 0.15s, background 0.15s',
+              }}
+              onMouseOver={e => { if (!active) e.currentTarget.style.color = 'var(--text)' }}
+              onMouseOut={e => { if (!active) e.currentTarget.style.color = 'var(--toolbar-text)' }}
+            >{labels[i]}</button>
+          )
+        })}
+      </div>
       {sep()}
       {btn('Settings', onOpenSettings)}
 

@@ -100,6 +100,10 @@ interface SettingsModalProps {
   onToolbarColor: (s: string) => void
   toolbarTextColor: string
   onToolbarTextColor: (s: string) => void
+  postureEnabled: boolean
+  onPostureEnabled: (b: boolean) => void
+  postureInterval: number
+  onPostureInterval: (n: number) => void
 }
 
 export default function SettingsModal({
@@ -115,6 +119,7 @@ export default function SettingsModal({
   keySounds, onKeySounds, keySoundsVolume, onKeySoundsVolume,
   customKeySounds, onCustomKeySound, onPreviewSound,
   toolbarColor, onToolbarColor, toolbarTextColor, onToolbarTextColor,
+  postureEnabled, onPostureEnabled, postureInterval, onPostureInterval,
 }: SettingsModalProps) {
   const [saveName, setSaveName]           = useState('')
   const [showSaveInput, setShowSaveInput] = useState(false)
@@ -426,6 +431,29 @@ export default function SettingsModal({
             />
           </div>
         </div>
+
+        {label('Reminders')}
+        <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 10 }}>
+          <span style={{ fontSize: 12, color: 'var(--text2)', width: 120 }}>Posture check</span>
+          <button
+            onClick={() => onPostureEnabled(!postureEnabled)}
+            style={{ padding: '4px 12px', background: postureEnabled ? 'var(--accent)' : 'transparent', border: '1px solid var(--border)', borderRadius: 5, color: postureEnabled ? 'var(--bg)' : 'var(--text3)', cursor: 'pointer', fontFamily: '"JetBrains Mono", monospace', fontSize: 10, textTransform: 'uppercase', letterSpacing: '0.07em', transition: 'background 0.2s, color 0.2s' }}
+          >{postureEnabled ? 'On' : 'Off'}</button>
+        </div>
+        {postureEnabled && (
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 16, paddingLeft: 0 }}>
+            <span style={{ fontSize: 12, color: 'var(--text2)', width: 120 }}>Every</span>
+            <div style={{ display: 'flex', gap: 5, flexWrap: 'wrap' as const }}>
+              {[10, 15, 20, 30, 45, 60, 90].map(m => (
+                <button
+                  key={m}
+                  onClick={() => onPostureInterval(m)}
+                  style={{ padding: '4px 10px', background: postureInterval === m ? 'rgba(196,168,130,0.2)' : 'transparent', border: '1px solid var(--border)', borderRadius: 5, color: postureInterval === m ? 'var(--accent)' : 'var(--text3)', cursor: 'pointer', fontFamily: '"JetBrains Mono", monospace', fontSize: 10 }}
+                >{m}m</button>
+              ))}
+            </div>
+          </div>
+        )}
 
         <button onClick={onClose} style={{ width: '100%', padding: 10, background: 'transparent', border: '1px solid var(--border)', color: 'var(--text2)', borderRadius: 6, cursor: 'pointer', fontFamily: '"JetBrains Mono", monospace', fontSize: 11, letterSpacing: '0.08em', textTransform: 'uppercase' as const }}>Close</button>
       </div>

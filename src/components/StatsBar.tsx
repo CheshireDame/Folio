@@ -4,6 +4,7 @@ interface StatsBarProps {
   wordGoal: number
   timer: number
   timerRunning: boolean
+  timerPopupOpen: boolean
   focusMode: boolean
   onTimerToggle: () => void
   onTimerReset: () => void
@@ -11,7 +12,7 @@ interface StatsBarProps {
 }
 
 export default function StatsBar({
-  words, chars, wordGoal, timer, timerRunning,
+  words, chars, wordGoal, timer, timerRunning, timerPopupOpen,
   focusMode, onTimerToggle, onTimerReset, onGoalChange
 }: StatsBarProps) {
   if (focusMode) return null
@@ -79,8 +80,8 @@ export default function StatsBar({
       <span style={{ color: timerRunning ? 'var(--accent)' : 'var(--text3)' }}>
         {fmt(timer)}
       </span>
-      {smallBtn(timerRunning ? 'Pause' : 'Start', onTimerToggle)}
-      {smallBtn('Reset', onTimerReset)}
+      {!timerPopupOpen && smallBtn(timerRunning ? 'Pause' : 'Start', onTimerToggle)}
+      {!timerPopupOpen && smallBtn('Reset', onTimerReset)}
     </div>
   )
 }
