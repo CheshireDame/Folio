@@ -35,6 +35,8 @@ import TimerPopup from './components/TimerPopup'
 import PostureToast from './components/PostureToast'
 import IdeationCanvas, { makeIdeationNote } from './components/IdeationCanvas'
 import BlockEditor from './components/BlockEditor'
+import MindMap from './components/MindMap'
+import { loadMindMap, saveMindMap, EMPTY_MIND_MAP, MindMapData } from './lib/storage'
 import './App.css'
 
 const TabHandler = Extension.create({
@@ -141,6 +143,8 @@ const [showSettings, setShowSettings]     = useState(false)
   const [postureEnabled, setPostureEnabled] = useState(false)
   const [postureInterval, setPostureInterval] = useState(30)
   const [showPosture, setShowPosture]       = useState(false)
+  const [showMindMap, setShowMindMap]       = useState(false)
+  const [mindMap, setMindMap]               = useState<MindMapData>(EMPTY_MIND_MAP)
 
   const timerRef      = useRef<number | null>(null)
   const imageInputRef = useRef<HTMLInputElement>(null)
@@ -211,7 +215,14 @@ setShowFormattingBar(data.settings.showFormattingBar ?? true)
     loadAudioTracks().then(setAudioTracks)
     loadWorkspaceImages().then(setWorkspaceImages)
     loadCustomKeySounds().then(setCustomKeySounds)
+    loadMindMap().then(setMindMap)
   }, [])
+
+  // Mind-map persistence
+  useEffect(() => {
+    if (!loaded) return
+    saveMindMap(mindMap)
+  }, [mindMap, loaded])
 
   // Load draft content into editor once both editor and data are ready
   useEffect(() => {
@@ -565,6 +576,7 @@ const handleImageFile = (e: React.ChangeEvent<HTMLInputElement>) => {
           showSpacing={showSpacing} onToggleSpacing={() => { setShowSpacing(s => !s); setShowGlyphs(false) }}
           showGlyphs={showGlyphs}  onToggleGlyphs={() => { setShowGlyphs(g => !g); setShowSpacing(false) }}
           currentStage={currentStage} onStageChange={handleStageChange}
+          onOpenMindMap={() => setShowMindMap(true)}
         />
         <FormattingBar editor={editor} visible={showFormattingBar} />
         {showSpacing && (
@@ -695,6 +707,14 @@ WebkitBackdropFilter: canvasBlur > 0 ? 'blur(' + canvasBlur + 'px)' : undefined,
         />
       )}
       {showPosture && <PostureToast onDismiss={() => setShowPosture(false)} />}
+
+      {showMindMap && (
+        <MindMap
+          data={mindMap}
+          onChange={setMindMap}
+          onClose={() => setShowMindMap(false)}
+        />
+      )}
 
       {/* Stage conversion prompts */}
       {(showConvertPrompt || showBuildPrompt) && (
