@@ -23,5 +23,10 @@ dist-ssr
 *.sln
 *.sw?
 
+# OS / misc
+Thumbs.db
+ehthumbs.db
+*.tmp
+
 # Tauri / Rust
 src-tauri/target/

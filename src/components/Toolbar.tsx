@@ -27,6 +27,7 @@ interface ToolbarProps {
   onToggleGlyphs: () => void
   currentStage: 1 | 2 | 3
   onStageChange: (s: 1 | 2 | 3) => void
+  onOpenMindMap: () => void
 }
 
 export default function Toolbar({
@@ -36,7 +37,7 @@ export default function Toolbar({
   onOpenSettings, onImage, onToggleFormattingBar: _ftb, showFormattingBar: _sfb, onNewNote,
   onToggleAudio, audioOpen, autoHideBars, onToggleAutoHideBars, imageMode, onToggleImageMode,
   showSpacing, onToggleSpacing, showGlyphs, onToggleGlyphs,
-  currentStage, onStageChange,
+  currentStage, onStageChange, onOpenMindMap,
 }: ToolbarProps) {
 
   const btn = (label: string, action: () => void, active = false, title?: string) => (
@@ -120,6 +121,7 @@ export default function Toolbar({
       </div>
       {sep()}
       {btn('Note', onNewNote)}
+      {btn('Mind Map', onOpenMindMap, false, 'Open the brainstorming canvas — connect bubbles and images')}
       {btn('Audio', onToggleAudio, audioOpen)}
       {sep()}
       {btn('Panel', onTogglePanel)}

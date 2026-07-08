@@ -308,6 +308,75 @@ export async function loadWorkspaceImages(): Promise<WorkspaceImage[]> {
   } catch (e) { console.error('Failed to load workspace images:', e); return [] }
 }
 
+// ─── Mind Map ────────────────────────────────────────────────────────────────
+// A standalone brainstorming canvas: bubbles you connect with lines, plus
+// images that bubbles can connect to at any point.
+
+export interface MindNode {
+  id: string
+  text: string
+  x: number          // world coordinates (top-left of the bubble)
+  y: number
+  width: number
+  color: string
+  fontSize: number
+}
+
+export interface MindImage {
+  id: string
+  src: string
+  alt?: string
+  x: number          // world coordinates (top-left)
+  y: number
+  width: number
+  height: number
+}
+
+// An endpoint is either the centre of a bubble, or a specific point on an
+// image. For images, ax/ay are fractions (0..1) of the image so the connection
+// follows the image as it moves or resizes.
+export interface MindEndpoint {
+  kind: 'node' | 'image'
+  id: string
+  ax?: number
+  ay?: number
+}
+
+export interface MindEdge {
+  id: string
+  from: MindEndpoint
+  to: MindEndpoint
+}
+
+export interface MindMapData {
+  nodes: MindNode[]
+  edges: MindEdge[]
+  images: MindImage[]
+}
+
+export const EMPTY_MIND_MAP: MindMapData = { nodes: [], edges: [], images: [] }
+
+async function getMindMapPath(): Promise<string> {
+  const dir = await appDataDir()
+  const folioDir = await join(dir, 'Folio')
+  if (!(await exists(folioDir))) await mkdir(folioDir, { recursive: true })
+  return join(folioDir, 'mindmap.json')
+}
+
+export async function saveMindMap(data: MindMapData): Promise<void> {
+  try {
+    await writeTextFile(await getMindMapPath(), JSON.stringify(data))
+  } catch (e) { console.error('Failed to save mind map:', e) }
+}
+
+export async function loadMindMap(): Promise<MindMapData> {
+  try {
+    const path = await getMindMapPath()
+    if (!(await exists(path))) return { ...EMPTY_MIND_MAP }
+    return { ...EMPTY_MIND_MAP, ...JSON.parse(await readTextFile(path)) }
+  } catch (e) { console.error('Failed to load mind map:', e); return { ...EMPTY_MIND_MAP } }
+}
+
 async function getAudioPath(): Promise<string> {
   const dir = await appDataDir()
   const folioDir = await join(dir, 'Folio')
