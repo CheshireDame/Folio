@@ -391,7 +391,7 @@ setShowFormattingBar(data.settings.showFormattingBar ?? true)
 
   const saveDraft = useCallback(() => {
     if (!editor) return
-    const updated = { ...drafts, [currentDraft]: { content: editor.getHTML(), savedAt: new Date().toISOString() } }
+    const updated = { ...drafts, [currentDraft]: { ...drafts[currentDraft], content: editor.getHTML(), savedAt: new Date().toISOString() } }
     setDrafts(updated)
     saveData({ drafts: updated, currentDraft, notes, settings: { themeIdx, accentColor, bgColor, fontSize, editorWidth, lineHeight, wordGoal } })
   }, [editor, currentDraft, drafts, notes, themeIdx, accentColor, bgColor, fontSize, editorWidth, lineHeight, wordGoal])
@@ -408,7 +408,7 @@ setShowFormattingBar(data.settings.showFormattingBar ?? true)
     if (!result) return
     saveDraft()
     const draftName = result.title
-    setDrafts(d => ({ ...d, [draftName]: { content: result.content, savedAt: new Date().toISOString() } }))
+    setDrafts(d => ({ ...d, [draftName]: { ...d[draftName], content: result.content, savedAt: new Date().toISOString() } }))
     setCurrentDraft(draftName)
     setCurrentFilePath(result.path)
     editor?.commands.setContent(result.content)
