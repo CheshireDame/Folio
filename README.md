@@ -1,11 +1,13 @@
 # Folio
 
-**A focused, beautiful writing app — from first spark to finished draft.**
+## My little focused, beautiful writing app; based off FocusWriter.
+*Please check their work out, it IS a good app; I just wanted to add my own little features: https://gottcode.org/focuswriter/*
+
 
 Folio is a desktop writing environment built around a three-stage workflow:
-scatter your ideas, organize them into blocks, then write in a clean,
-distraction-free editor. Version 2.0 adds a full **Mind Map** brainstorming
-canvas for thinking visually before you write.
+scatter your ideas; organize them into blocks; then write in a clean,
+distraction-free editor. 
+Version 2.0 adds a full **Mind Map** brainstorming canvas for thinking visually before you write.
 
 Built with [Tauri](https://tauri.app/), React, and TypeScript.
 
@@ -13,14 +15,14 @@ Built with [Tauri](https://tauri.app/), React, and TypeScript.
 
 ## Features
 
-### ✍️ The writing workflow
+### The writing workflow
 - **Three stages** — *Ideation* (scatter notes), *Organize* (arrange into blocks), and *Write* (a clean rich-text editor), so you can move from messy thoughts to a polished draft without leaving the app.
 - **Rich text editor** powered by [Tiptap](https://tiptap.dev/) — headings, formatting, fonts, colors, highlights, text alignment, super/subscript, and special-character glyphs.
 - **Comments & notes** — annotate your draft and keep side notes in a dedicated panel.
 - **Drafts** — keep multiple documents and switch between them.
 - **Export** your writing to `.folio`, RTF, HTML, Markdown, or plain text.
 
-### 🧠 Mind Map *(new in 2.0)*
+### Mind Map *(new in 2.0)*
 A standalone brainstorming canvas for connecting ideas visually:
 - **Connectable bubbles** — create bubbles, type in them, and drag them anywhere. Connections stay attached as bubbles move.
 - **Images on the canvas** — upload a picture, move and resize it, and connect a bubble to *any exact point* on it. The link stays pinned to that spot even as the image moves.
@@ -29,8 +31,8 @@ A standalone brainstorming canvas for connecting ideas visually:
 - **Export** as **PNG** (picture), **SVG** (sharp vector), or **Foliomap** (a re-openable map file).
 - **Open** saved `.foliomap` files back onto the canvas.
 
-### 🎨 Make it yours
-- Multiple built-in **themes** (Sepia, Ivory, Slate, Forest, Dusk) plus custom themes, accent colors, and background images.
+### Customizeability
+- Multiple built-in **themes** (Sepia, Ivory, Slate, Forest, Dusk); build and save custom themes, accent colors, and background images.
 - Adjustable font, width, line height, and paragraph spacing.
 - **Focus mode**, auto-hiding toolbars, a writing **timer**, word-count goals, ambient **audio** tracks, optional **keyboard sounds**, and posture reminders.
 
