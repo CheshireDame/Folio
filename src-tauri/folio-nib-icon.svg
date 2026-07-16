@@ -1,0 +1,9 @@
+<svg width="512" height="512" viewBox="0 0 512 512" xmlns="http://www.w3.org/2000/svg">
+  <defs><linearGradient id="nibFill" x1="0%" y1="0%" x2="0%" y2="100%">
+    <stop offset="0%" stop-color="#25170d"></stop>
+    <stop offset="100%" stop-color="#090301"></stop>
+  </linearGradient></defs>
+  <path d="M 156 96 C 156 62 200 46 256 46 C 312 46 356 62 356 96 L 344 300 C 344 340 304 396 256 452 C 208 396 168 340 168 300 Z" fill="url(#nibFill)" stroke="#e9e9ed" stroke-width="16" stroke-linejoin="round"></path>
+  <circle cx="256" cy="140" r="22" fill="none" stroke="#e9e9ed" stroke-width="8"></circle>
+  <path d="M 256 162 L 256 428" stroke="#e9e9ed" stroke-width="9" stroke-linecap="round"></path>
+</svg>
