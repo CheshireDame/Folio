@@ -850,6 +850,8 @@ WebkitBackdropFilter: canvasBlur > 0 ? 'blur(' + canvasBlur + 'px)' : undefined,
           data={mindMap}
           onChange={setMindMap}
           onClose={() => setShowMindMap(false)}
+          ideationNotes={ideationNotes}
+          notesSections={notesSections}
         />
       )}
 

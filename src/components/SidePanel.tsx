@@ -31,7 +31,7 @@ export default function SidePanel({
   if (!open) return null
 
   const addSection = () => {
-    const s: NoteSection = { id: Date.now().toString(), title: 'New section', content: '' }
+    const s: NoteSection = { id: Date.now().toString(36) + Math.random().toString(36).slice(2), title: 'New section', content: '' }
     onNotesSectionsChange([...notesSections, s])
     setEditingTitleId(s.id)
   }

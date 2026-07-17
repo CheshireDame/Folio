@@ -328,6 +328,7 @@ export interface MindNode {
   width: number
   color: string
   fontSize: number
+  rotation?: number  // degrees; absent/0 = no rotation
 }
 
 export interface MindImage {
@@ -350,10 +351,14 @@ export interface MindEndpoint {
   ay?: number
 }
 
+export interface MindEdgePoint { x: number; y: number }
+
 export interface MindEdge {
   id: string
   from: MindEndpoint
   to: MindEndpoint
+  points?: MindEdgePoint[]   // ordered bend points, world space, from -> to. Empty/absent = straight line.
+  color?: string             // per-edge stroke hex. Absent = theme default.
 }
 
 export interface MindMapData {

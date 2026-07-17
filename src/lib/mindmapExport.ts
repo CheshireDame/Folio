@@ -2,6 +2,7 @@ import { save as dialogSave, open as dialogOpen } from '@tauri-apps/plugin-dialo
 import { writeTextFile, writeFile, readTextFile } from '@tauri-apps/plugin-fs'
 import { EMPTY_MIND_MAP } from './storage'
 import type { MindMapData, MindEndpoint } from './storage'
+import { catmullRomSegments, segmentsToSvgPath, drawSegmentsOnCanvas, type Pt } from './mindmapCurve'
 
 export type MindExportFormat = 'png' | 'svg' | 'foliomap'
 export interface ExportResult { ok: boolean; reason?: 'empty' | 'cancelled' | 'error'; path?: string }
@@ -33,6 +34,12 @@ function bounds(data: MindMapData, heights: Record<string, number>) {
   for (const im of data.images) {
     minX = Math.min(minX, im.x); minY = Math.min(minY, im.y)
     maxX = Math.max(maxX, im.x + im.width); maxY = Math.max(maxY, im.y + im.height)
+  }
+  for (const e of data.edges) {
+    for (const p of e.points ?? []) {
+      minX = Math.min(minX, p.x); minY = Math.min(minY, p.y)
+      maxX = Math.max(maxX, p.x); maxY = Math.max(maxY, p.y)
+    }
   }
   if (!isFinite(minX)) return null
   return { minX, minY, maxX, maxY }
@@ -111,8 +118,9 @@ export async function mindMapToPngBytes(data: MindMapData, heights: Record<strin
   for (const e of data.edges) {
     const a = endpoint(data, heights, e.from), c = endpoint(data, heights, e.to)
     if (!a || !c) continue
-    ctx.strokeStyle = theme.edge
-    ctx.beginPath(); ctx.moveTo(a.x, a.y); ctx.lineTo(c.x, c.y); ctx.stroke()
+    const pts: Pt[] = [a, ...(e.points ?? []), c]
+    ctx.strokeStyle = e.color || theme.edge
+    ctx.beginPath(); drawSegmentsOnCanvas(ctx, pts[0], catmullRomSegments(pts)); ctx.stroke()
     ctx.fillStyle = theme.accent
     if (e.to.kind === 'image') { ctx.beginPath(); ctx.arc(c.x, c.y, 4, 0, Math.PI * 2); ctx.fill() }
     if (e.from.kind === 'image') { ctx.beginPath(); ctx.arc(a.x, a.y, 4, 0, Math.PI * 2); ctx.fill() }
@@ -121,6 +129,11 @@ export async function mindMapToPngBytes(data: MindMapData, heights: Record<strin
   // bubbles on top
   for (const n of data.nodes) {
     const nh = heights[n.id] ?? NODE_FALLBACK_H
+    ctx.save()
+    if (n.rotation) {
+      const cx = n.x + n.width / 2, cy = n.y + nh / 2
+      ctx.translate(cx, cy); ctx.rotate(n.rotation * Math.PI / 180); ctx.translate(-cx, -cy)
+    }
     roundRectPath(ctx, n.x, n.y, n.width, nh, 8)
     ctx.fillStyle = n.color
     ctx.shadowColor = 'rgba(0,0,0,0.28)'; ctx.shadowBlur = 12; ctx.shadowOffsetY = 4
@@ -137,6 +150,7 @@ export async function mindMapToPngBytes(data: MindMapData, heights: Record<strin
     const lines = wrap(ctx, n.text, n.width - TEXT_PAD_X * 2)
     let ty = n.y + HEADER_H + TEXT_PAD_TOP + n.fontSize
     for (const ln of lines) { ctx.fillText(ln, n.x + TEXT_PAD_X, ty); ty += n.fontSize * LINE_H }
+    ctx.restore()
   }
 
   const dataUrl = canvas.toDataURL('image/png')
@@ -173,14 +187,17 @@ export function mindMapToSvg(data: MindMapData, heights: Record<string, number>)
   for (const e of data.edges) {
     const a = endpoint(data, heights, e.from), c = endpoint(data, heights, e.to)
     if (!a || !c) continue
-    parts.push(`<line x1="${a.x}" y1="${a.y}" x2="${c.x}" y2="${c.y}" stroke="${theme.edge}" stroke-width="2" stroke-linecap="round"/>`)
+    const pts: Pt[] = [a, ...(e.points ?? []), c]
+    const d = segmentsToSvgPath(pts[0], catmullRomSegments(pts))
+    parts.push(`<path d="${d}" fill="none" stroke="${e.color || theme.edge}" stroke-width="2" stroke-linecap="round"/>`)
     if (e.to.kind === 'image') parts.push(`<circle cx="${c.x}" cy="${c.y}" r="4" fill="${theme.accent}"/>`)
     if (e.from.kind === 'image') parts.push(`<circle cx="${a.x}" cy="${a.y}" r="4" fill="${theme.accent}"/>`)
   }
   // bubbles
   for (const n of data.nodes) {
     const nh = heights[n.id] ?? NODE_FALLBACK_H
-    parts.push(`<g>`)
+    const cx = n.x + n.width / 2, cy = n.y + nh / 2
+    parts.push(`<g${n.rotation ? ` transform="rotate(${n.rotation} ${cx} ${cy})"` : ''}>`)
     parts.push(`<rect x="${n.x}" y="${n.y}" width="${n.width}" height="${nh}" rx="8" fill="${n.color}"/>`)
     parts.push(`<rect x="${n.x}" y="${n.y}" width="${n.width}" height="${HEADER_H}" rx="8" fill="rgba(0,0,0,0.06)"/>`)
     parts.push(`<rect x="${n.x}" y="${n.y + 8}" width="${n.width}" height="${HEADER_H - 8}" fill="rgba(0,0,0,0.06)"/>`)

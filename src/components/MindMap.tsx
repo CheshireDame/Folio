@@ -1,42 +1,57 @@
 import { useEffect, useRef, useState, useCallback, type MouseEvent as ReactMouseEvent } from 'react'
-import type { MindMapData, MindNode, MindImage, MindEdge, MindEndpoint } from '../lib/storage'
+import type { MindMapData, MindNode, MindImage, MindEdge, MindEndpoint, IdeationNote, NoteSection } from '../lib/storage'
 import { exportMindMap, importMindMap, type MindExportFormat } from '../lib/mindmapExport'
+import { catmullRomSegments, segmentsToSvgPath, nearestSegmentIndex, type Pt, type CRSegment } from '../lib/mindmapCurve'
+import { MIND_COLORS } from '../lib/mindmapColors'
+import ColorSwatchPicker from './ColorSwatchPicker'
 
-const COLORS = ['#f5e6a3', '#f0b8b8', '#b8e0b8', '#b8d0e8', '#d0b8e8', '#fcd5a0', '#ffffff']
 const DEFAULT_NODE_W = 180
 const NODE_FALLBACK_H = 80   // used until a bubble's real height is measured
 
 // One pointer interaction at a time. Stored in a ref so the global mouse
 // handlers always read the live value.
 type Drag =
-  | { mode: 'node';   id: string; startSX: number; startSY: number; origX: number; origY: number; moved: boolean }
+  | { mode: 'node';   ids: string[]; startSX: number; startSY: number; origPositions: Record<string, { x: number; y: number }>; moved: boolean }
   | { mode: 'image';  id: string; startSX: number; startSY: number; origX: number; origY: number; moved: boolean }
   | { mode: 'resize'; id: string; startSX: number; origW: number; ratio: number }
   | { mode: 'pan';    startSX: number; startSY: number; origPanX: number; origPanY: number }
   | { mode: 'connect'; fromId: string }
+  | { mode: 'edgePoint'; edgeId: string; index: number; startSX: number; startSY: number; origX: number; origY: number }
+  | { mode: 'box'; startWX: number; startWY: number }
+
+interface BoxSel { x1: number; y1: number; x2: number; y2: number }
 
 interface Props {
   data: MindMapData
   onChange: (data: MindMapData) => void
   onClose: () => void
+  ideationNotes: IdeationNote[]
+  notesSections: NoteSection[]
 }
 
 let idCounter = 0
 const newId = () => `${Date.now().toString(36)}-${(idCounter++).toString(36)}`
 
-export default function MindMap({ data, onChange, onClose }: Props) {
+export default function MindMap({ data, onChange, onClose, ideationNotes, notesSections }: Props) {
   const viewportRef = useRef<HTMLDivElement>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
 
   const [scale, setScale] = useState(1)
   const [pan, setPan] = useState({ x: 0, y: 0 })
   const [selectedEdge, setSelectedEdge] = useState<string | null>(null)
+  const [edgeColorPickerFor, setEdgeColorPickerFor] = useState<string | null>(null)
+  const [nodeColorPickerFor, setNodeColorPickerFor] = useState<string | null>(null)
+  const [bulkColorPickerOpen, setBulkColorPickerOpen] = useState(false)
   const [exportOpen, setExportOpen] = useState(false)
+  const [importOpen, setImportOpen] = useState(false)
   const [toast, setToast] = useState<string | null>(null)
   // Live preview point (world coords) while dragging out a new connection.
   const [connectPos, setConnectPos] = useState<{ x: number; y: number } | null>(null)
   // Measured bubble heights (text makes them grow); keyed by node id.
   const [heights, setHeights] = useState<Record<string, number>>({})
+  // Multi-select: bubble ids currently selected, and the live rubber-band box (world coords) while dragging one out.
+  const [selected, setSelected] = useState<Set<string>>(new Set())
+  const [boxSel, setBoxSel] = useState<BoxSel | null>(null)
 
   // Refs mirror state so document-level listeners avoid stale closures.
   const dataRef = useRef(data);     useEffect(() => { dataRef.current = data }, [data])
@@ -56,6 +71,15 @@ export default function MindMap({ data, onChange, onClose }: Props) {
     const s = scaleRef.current, p = panRef.current
     const ox = rect?.left ?? 0, oy = rect?.top ?? 0
     return { x: (clientX - ox - p.x) / s, y: (clientY - oy - p.y) / s }
+  }, [])
+
+  // World coordinates → screen (client) coordinates — inverse of toWorld, used
+  // to anchor screen-space popovers (color pickers) to a world-space point.
+  const worldToScreen = useCallback((wx: number, wy: number) => {
+    const rect = viewportRef.current?.getBoundingClientRect()
+    const s = scaleRef.current, p = panRef.current
+    const ox = rect?.left ?? 0, oy = rect?.top ?? 0
+    return { x: ox + wx * s + p.x, y: oy + wy * s + p.y }
   }, [])
 
   const nodeHeight = useCallback((id: string) => heightsRef.current[id] ?? NODE_FALLBACK_H, [])
@@ -82,21 +106,36 @@ export default function MindMap({ data, onChange, onClose }: Props) {
       const s = scaleRef.current
       if (d.mode === 'pan') {
         setPan({ x: d.origPanX + (e.clientX - d.startSX), y: d.origPanY + (e.clientY - d.startSY) })
-      } else if (d.mode === 'node' || d.mode === 'image') {
+      } else if (d.mode === 'node') {
         const dx = (e.clientX - d.startSX) / s
         const dy = (e.clientY - d.startSY) / s
         if (!d.moved && Math.abs(e.clientX - d.startSX) + Math.abs(e.clientY - d.startSY) > 2) d.moved = true
-        const key = d.mode === 'node' ? 'nodes' : 'images'
-        const list = (dataRef.current[key] as (MindNode | MindImage)[]).map(it =>
-          it.id === d.id ? { ...it, x: d.origX + dx, y: d.origY + dy } : it
-        )
-        patch({ [key]: list } as Partial<MindMapData>)
+        patch({ nodes: dataRef.current.nodes.map(n =>
+          d.ids.includes(n.id) ? { ...n, x: d.origPositions[n.id].x + dx, y: d.origPositions[n.id].y + dy } : n
+        ) })
+      } else if (d.mode === 'image') {
+        const dx = (e.clientX - d.startSX) / s
+        const dy = (e.clientY - d.startSY) / s
+        if (!d.moved && Math.abs(e.clientX - d.startSX) + Math.abs(e.clientY - d.startSY) > 2) d.moved = true
+        patch({ images: dataRef.current.images.map(im =>
+          im.id === d.id ? { ...im, x: d.origX + dx, y: d.origY + dy } : im
+        ) })
       } else if (d.mode === 'resize') {
         const newW = Math.max(60, d.origW + (e.clientX - d.startSX) / s)
         patch({ images: dataRef.current.images.map(im =>
           im.id === d.id ? { ...im, width: newW, height: newW * d.ratio } : im) })
       } else if (d.mode === 'connect') {
         setConnectPos(toWorld(e.clientX, e.clientY))
+      } else if (d.mode === 'edgePoint') {
+        const dx = (e.clientX - d.startSX) / s
+        const dy = (e.clientY - d.startSY) / s
+        patch({ edges: dataRef.current.edges.map(ed =>
+          ed.id === d.edgeId
+            ? { ...ed, points: (ed.points ?? []).map((p, i) => i === d.index ? { x: d.origX + dx, y: d.origY + dy } : p) }
+            : ed) })
+      } else if (d.mode === 'box') {
+        const w = toWorld(e.clientX, e.clientY)
+        setBoxSel({ x1: Math.min(d.startWX, w.x), y1: Math.min(d.startWY, w.y), x2: Math.max(d.startWX, w.x), y2: Math.max(d.startWY, w.y) })
       }
     }
 
@@ -130,6 +169,18 @@ export default function MindMap({ data, onChange, onClose }: Props) {
           if (!dup) patch({ edges: [...dataRef.current.edges, { id: newId(), from, to }] })
         }
         setConnectPos(null)
+      } else if (d.mode === 'box') {
+        const w = toWorld(e.clientX, e.clientY)
+        const box = { x1: Math.min(d.startWX, w.x), y1: Math.min(d.startWY, w.y), x2: Math.max(d.startWX, w.x), y2: Math.max(d.startWY, w.y) }
+        if (box.x2 - box.x1 > 4 || box.y2 - box.y1 > 4) {
+          const hit = new Set(
+            dataRef.current.nodes
+              .filter(n => n.x < box.x2 && n.x + n.width > box.x1 && n.y < box.y2 && n.y + (heightsRef.current[n.id] ?? NODE_FALLBACK_H) > box.y1)
+              .map(n => n.id)
+          )
+          setSelected(hit)
+        }
+        setBoxSel(null)
       }
       dragRef.current = null
     }
@@ -164,20 +215,32 @@ export default function MindMap({ data, onChange, onClose }: Props) {
     return () => el.removeEventListener('wheel', onWheel)
   }, [])
 
-  // ─── Keyboard: delete selected edge, Esc to close ──────────────────────────
+  // ─── Keyboard: delete selected edge/bubbles, Esc clears selection then closes ──
   useEffect(() => {
     const handler = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') { onClose(); return }
-      if ((e.key === 'Delete' || e.key === 'Backspace') && selectedEdge) {
+      if (e.key === 'Escape') {
+        if (selected.size > 0) { setSelected(new Set()); return }
+        onClose(); return
+      }
+      if (e.key === 'Delete' || e.key === 'Backspace') {
         if (document.activeElement?.tagName === 'TEXTAREA') return
-        e.preventDefault()
-        patch({ edges: dataRef.current.edges.filter(ed => ed.id !== selectedEdge) })
-        setSelectedEdge(null)
+        if (selectedEdge) {
+          e.preventDefault()
+          patch({ edges: dataRef.current.edges.filter(ed => ed.id !== selectedEdge) })
+          setSelectedEdge(null)
+        } else if (selected.size > 0) {
+          e.preventDefault()
+          patch({
+            nodes: dataRef.current.nodes.filter(n => !selected.has(n.id)),
+            edges: dataRef.current.edges.filter(ed => ![...selected].some(id => endTouches(ed, 'node', id))),
+          })
+          setSelected(new Set())
+        }
       }
     }
     window.addEventListener('keydown', handler)
     return () => window.removeEventListener('keydown', handler)
-  }, [selectedEdge, patch, onClose])
+  }, [selectedEdge, selected, patch, onClose])
 
   // ─── Actions ───────────────────────────────────────────────────────────────
   const addBubble = () => {
@@ -188,7 +251,7 @@ export default function MindMap({ data, onChange, onClose }: Props) {
       id: newId(), text: '',
       x: c.x - DEFAULT_NODE_W / 2, y: c.y - 40,
       width: DEFAULT_NODE_W,
-      color: COLORS[Math.floor(Math.random() * (COLORS.length - 1))],
+      color: MIND_COLORS[Math.floor(Math.random() * (MIND_COLORS.length - 1))],
       fontSize: 15,
     }
     patch({ nodes: [...data.nodes, node] })
@@ -216,10 +279,22 @@ export default function MindMap({ data, onChange, onClose }: Props) {
     e.target.value = ''
   }
 
-  const removeNode = (id: string) => patch({
-    nodes: data.nodes.filter(n => n.id !== id),
-    edges: data.edges.filter(ed => !endTouches(ed, 'node', id)),
-  })
+  const removeNode = (id: string) => {
+    patch({
+      nodes: data.nodes.filter(n => n.id !== id),
+      edges: data.edges.filter(ed => !endTouches(ed, 'node', id)),
+    })
+    setSelected(s => { if (!s.has(id)) return s; const n = new Set(s); n.delete(id); return n })
+  }
+  const bulkSetColor = (color: string) =>
+    patch({ nodes: data.nodes.map(n => selected.has(n.id) ? { ...n, color } : n) })
+  const bulkDelete = () => {
+    patch({
+      nodes: data.nodes.filter(n => !selected.has(n.id)),
+      edges: data.edges.filter(ed => ![...selected].some(id => endTouches(ed, 'node', id))),
+    })
+    setSelected(new Set())
+  }
   const removeImage = (id: string) => patch({
     images: data.images.filter(i => i.id !== id),
     edges: data.edges.filter(ed => !endTouches(ed, 'image', id)),
@@ -235,7 +310,12 @@ export default function MindMap({ data, onChange, onClose }: Props) {
   const startNodeDrag = (e: ReactMouseEvent, n: MindNode) => {
     e.stopPropagation()
     setSelectedEdge(null)
-    dragRef.current = { mode: 'node', id: n.id, startSX: e.clientX, startSY: e.clientY, origX: n.x, origY: n.y, moved: false }
+    const isSelected = selected.has(n.id)
+    const ids = isSelected ? [...selected] : [n.id]
+    if (!isSelected) setSelected(new Set([n.id]))
+    const origPositions: Record<string, { x: number; y: number }> = {}
+    for (const node of data.nodes) if (ids.includes(node.id)) origPositions[node.id] = { x: node.x, y: node.y }
+    dragRef.current = { mode: 'node', ids, startSX: e.clientX, startSY: e.clientY, origPositions, moved: false }
   }
   const startImageDrag = (e: ReactMouseEvent, im: MindImage) => {
     e.stopPropagation()
@@ -254,7 +334,14 @@ export default function MindMap({ data, onChange, onClose }: Props) {
   const startPan = (e: ReactMouseEvent) => {
     if (e.target !== viewportRef.current && !(e.target as HTMLElement).dataset.mindWorld) return
     setSelectedEdge(null)
-    dragRef.current = { mode: 'pan', startSX: e.clientX, startSY: e.clientY, origPanX: pan.x, origPanY: pan.y }
+    if (e.shiftKey) {
+      setSelected(new Set())
+      const w = toWorld(e.clientX, e.clientY)
+      dragRef.current = { mode: 'box', startWX: w.x, startWY: w.y }
+    } else {
+      setSelected(new Set())
+      dragRef.current = { mode: 'pan', startSX: e.clientX, startSY: e.clientY, origPanX: pan.x, origPanY: pan.y }
+    }
   }
 
   const resetView = () => { setScale(1); setPan({ x: 0, y: 0 }) }
@@ -280,15 +367,89 @@ export default function MindMap({ data, onChange, onClose }: Props) {
     flash('Map opened ✓')
   }
 
-  // Build edge geometry from live state.
-  const renderEdges = () => {
-    const segs: { edge: MindEdge; a: { x: number; y: number }; b: { x: number; y: number } }[] = []
+  // Where an import should land: centered in the viewport if the canvas is
+  // empty, otherwise just beside whatever's already there so it never lands
+  // on top of existing content.
+  const landingSpot = () => {
+    if (data.nodes.length === 0 && data.images.length === 0) {
+      const rect = viewportRef.current?.getBoundingClientRect()
+      return toWorld((rect?.left ?? 0) + (rect?.width ?? 600) / 2 - 100, (rect?.top ?? 0) + (rect?.height ?? 400) / 2 - 100)
+    }
+    let maxX = -Infinity, minY = Infinity
+    for (const n of data.nodes) { maxX = Math.max(maxX, n.x + n.width); minY = Math.min(minY, n.y) }
+    for (const im of data.images) { maxX = Math.max(maxX, im.x + im.width); minY = Math.min(minY, im.y) }
+    return { x: maxX + 80, y: minY }
+  }
+
+  const importIdeas = () => {
+    if (ideationNotes.length === 0) { flash('No ideas on the Idea canvas to import'); return }
+    const minX = Math.min(...ideationNotes.map(n => n.x))
+    const minY = Math.min(...ideationNotes.map(n => n.y))
+    const landing = landingSpot()
+    const newNodes: MindNode[] = ideationNotes.map(n => ({
+      id: newId(), text: n.content,
+      x: landing.x + (n.x - minX), y: landing.y + (n.y - minY),
+      width: n.width, color: n.color, fontSize: n.fontSize, rotation: n.rotation,
+    }))
+    patch({ nodes: [...data.nodes, ...newNodes] })
+    flash(`Imported ${newNodes.length} idea${newNodes.length === 1 ? '' : 's'} ✓`)
+  }
+
+  const importNotesSections = () => {
+    if (notesSections.length === 0) { flash('No notes-panel sections to import'); return }
+    const landing = landingSpot()
+    const COLS = 3, GUTTER = 24, ROW_H = 160
+    const newNodes: MindNode[] = notesSections.map((s, i) => ({
+      id: newId(),
+      text: s.title ? `${s.title}\n\n${s.content}` : s.content,
+      x: landing.x + (i % COLS) * (DEFAULT_NODE_W + GUTTER),
+      y: landing.y + Math.floor(i / COLS) * ROW_H,
+      width: DEFAULT_NODE_W,
+      color: MIND_COLORS[Math.floor(Math.random() * (MIND_COLORS.length - 1))],
+      fontSize: 15,
+    }))
+    patch({ nodes: [...data.nodes, ...newNodes] })
+    flash(`Imported ${newNodes.length} note${newNodes.length === 1 ? '' : 's'} ✓`)
+  }
+
+  // Build curve geometry (bend points -> smooth path) from live state.
+  interface EdgeGeom { edge: MindEdge; a: Pt; b: Pt; pts: Pt[]; cr: CRSegment[]; d: string; anchor: Pt; delPos: Pt; colorPos: Pt }
+  const renderEdges = (): EdgeGeom[] => {
+    const segs: EdgeGeom[] = []
     for (const edge of data.edges) {
       const a = endpointPos(edge.from)
       const b = endpointPos(edge.to)
-      if (a && b) segs.push({ edge, a, b })
+      if (!a || !b) continue
+      const pts: Pt[] = [a, ...(edge.points ?? []), b]
+      const cr = catmullRomSegments(pts)
+      const d = segmentsToSvgPath(pts[0], cr)
+      const anchor = edge.points?.length ? edge.points[Math.floor((edge.points.length - 1) / 2)] : { x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 }
+      // Offset the delete/color buttons perpendicular to the line, off the path itself —
+      // otherwise they render exactly where a user double-clicks to add a bend point, and
+      // the second click of that double-click lands on the button instead.
+      const dirX = b.x - a.x, dirY = b.y - a.y
+      const len = Math.hypot(dirX, dirY) || 1
+      const tx = dirX / len, ty = dirY / len
+      const px = -ty, py = tx
+      const delPos = { x: anchor.x + px * 18, y: anchor.y + py * 18 }
+      const colorPos = { x: delPos.x - tx * 22, y: delPos.y - ty * 22 }
+      segs.push({ edge, a, b, pts, cr, d, anchor, delPos, colorPos })
     }
     return segs
+  }
+
+  const addEdgePoint = (edge: MindEdge, pts: Pt[], cr: CRSegment[], click: Pt) => {
+    const k = nearestSegmentIndex(pts, cr, click)
+    const points = [...(edge.points ?? []).slice(0, k), click, ...(edge.points ?? []).slice(k)]
+    patch({ edges: data.edges.map(ed => ed.id === edge.id ? { ...ed, points } : ed) })
+  }
+  const removeEdgePoint = (edgeId: string, index: number) =>
+    patch({ edges: data.edges.map(ed => ed.id === edgeId ? { ...ed, points: (ed.points ?? []).filter((_, i) => i !== index) } : ed) })
+  const setEdgeColor = (edgeId: string, color: string | undefined) =>
+    patch({ edges: data.edges.map(ed => ed.id === edgeId ? { ...ed, color } : ed) })
+  const startEdgePointDrag = (e: ReactMouseEvent, edgeId: string, index: number, p: Pt) => {
+    e.stopPropagation()
+    dragRef.current = { mode: 'edgePoint', edgeId, index, startSX: e.clientX, startSY: e.clientY, origX: p.x, origY: p.y }
   }
   const segs = renderEdges()
   const connectFrom = dragRef.current?.mode === 'connect' ? endpointPos({ kind: 'node', id: dragRef.current.fromId }) : null
@@ -327,26 +488,41 @@ export default function MindMap({ data, onChange, onClose }: Props) {
 
           {/* Edges layer: above images, below bubbles */}
           <svg style={{ position: 'absolute', left: 0, top: 0, width: 1, height: 1, overflow: 'visible', pointerEvents: 'none' }}>
-            {segs.map(({ edge, a, b }) => {
+            {segs.map(({ edge, a, b, pts, cr, d, delPos, colorPos }) => {
               const sel = selectedEdge === edge.id
               return (
                 <g key={edge.id}>
-                  {/* wide invisible hit area */}
-                  <line x1={a.x} y1={a.y} x2={b.x} y2={b.y} stroke="transparent" strokeWidth={14}
+                  {/* wide invisible hit area — double-click adds a bend point at that spot */}
+                  <path d={d} fill="none" stroke="transparent" strokeWidth={14}
                     style={{ pointerEvents: dragRef.current ? 'none' : 'stroke', cursor: 'pointer' }}
-                    onMouseDown={e => { e.stopPropagation(); setSelectedEdge(edge.id) }} />
-                  <line x1={a.x} y1={a.y} x2={b.x} y2={b.y}
-                    stroke={sel ? 'var(--accent)' : 'var(--text3)'} strokeWidth={sel ? 3 : 2}
+                    onMouseDown={e => { e.stopPropagation(); setSelectedEdge(edge.id) }}
+                    onDoubleClick={e => { e.stopPropagation(); addEdgePoint(edge, pts, cr, toWorld(e.clientX, e.clientY)) }} />
+                  <path d={d} fill="none"
+                    stroke={sel ? 'var(--accent)' : (edge.color || 'var(--text3)')} strokeWidth={sel ? 3 : 2}
                     vectorEffect="non-scaling-stroke" pointerEvents="none" strokeLinecap="round" />
                   {/* dot where a line meets an image, at the exact connection point */}
                   {edge.to.kind === 'image' && <circle cx={b.x} cy={b.y} r={4} fill="var(--accent)" vectorEffect="non-scaling-stroke" pointerEvents="none" />}
                   {edge.from.kind === 'image' && <circle cx={a.x} cy={a.y} r={4} fill="var(--accent)" vectorEffect="non-scaling-stroke" pointerEvents="none" />}
+                  {/* draggable bend-point handles, double-click to remove */}
+                  {sel && (edge.points ?? []).map((p, i) => (
+                    <circle key={i} cx={p.x} cy={p.y} r={5} fill="var(--bg)" stroke="var(--accent)" strokeWidth={2}
+                      vectorEffect="non-scaling-stroke" style={{ cursor: 'grab', pointerEvents: 'auto' }}
+                      onMouseDown={e => startEdgePointDrag(e, edge.id, i, p)}
+                      onDoubleClick={e => { e.stopPropagation(); removeEdgePoint(edge.id, i) }} />
+                  ))}
                   {sel && (
-                    <g style={{ cursor: 'pointer', pointerEvents: 'auto' }}
-                      onMouseDown={e => { e.stopPropagation(); patch({ edges: data.edges.filter(ed => ed.id !== edge.id) }); setSelectedEdge(null) }}>
-                      <circle cx={(a.x + b.x) / 2} cy={(a.y + b.y) / 2} r={9} fill="var(--bg)" stroke="var(--accent)" strokeWidth={1.5} vectorEffect="non-scaling-stroke" />
-                      <text x={(a.x + b.x) / 2} y={(a.y + b.y) / 2 + 1} fill="var(--accent)" fontSize={11} textAnchor="middle" dominantBaseline="middle" style={{ userSelect: 'none' }}>✕</text>
-                    </g>
+                    <>
+                      <g style={{ cursor: 'pointer', pointerEvents: 'auto' }}
+                        onMouseDown={e => { e.stopPropagation(); patch({ edges: data.edges.filter(ed => ed.id !== edge.id) }); setSelectedEdge(null) }}>
+                        <circle cx={delPos.x} cy={delPos.y} r={9} fill="var(--bg)" stroke="var(--accent)" strokeWidth={1.5} vectorEffect="non-scaling-stroke" />
+                        <text x={delPos.x} y={delPos.y + 1} fill="var(--accent)" fontSize={11} textAnchor="middle" dominantBaseline="middle" style={{ userSelect: 'none' }}>✕</text>
+                      </g>
+                      <g style={{ cursor: 'pointer', pointerEvents: 'auto' }}
+                        onMouseDown={e => { e.stopPropagation(); setEdgeColorPickerFor(edgeColorPickerFor === edge.id ? null : edge.id) }}
+                        onContextMenu={e => { e.preventDefault(); e.stopPropagation(); setEdgeColor(edge.id, undefined) }}>
+                        <circle cx={colorPos.x} cy={colorPos.y} r={9} fill={edge.color || 'var(--text3)'} stroke="var(--bg)" strokeWidth={1.5} vectorEffect="non-scaling-stroke" />
+                      </g>
+                    </>
                   )}
                 </g>
               )
@@ -360,14 +536,20 @@ export default function MindMap({ data, onChange, onClose }: Props) {
 
           {/* Bubbles on top */}
           {data.nodes.map(n => (
-            <NodeCard key={n.id} node={n} height={nodeHeight(n.id)}
+            <NodeCard key={n.id} node={n} height={nodeHeight(n.id)} selected={selected.has(n.id)}
               onMeasure={measure}
               onHeaderDown={e => startNodeDrag(e, n)}
               onConnectDown={e => startConnect(e, n)}
               onText={t => updateNode(n.id, { text: t })}
-              onColor={c => updateNode(n.id, { color: c })}
+              onColorDotDown={e => { e.stopPropagation(); setNodeColorPickerFor(nodeColorPickerFor === n.id ? null : n.id) }}
               onRemove={() => removeNode(n.id)} />
           ))}
+
+          {/* Rubber-band selection box (Shift+drag on empty canvas) */}
+          {boxSel && (
+            <div style={{ position: 'absolute', left: boxSel.x1, top: boxSel.y1, width: boxSel.x2 - boxSel.x1, height: boxSel.y2 - boxSel.y1,
+              border: '1.5px solid var(--accent)', background: 'rgba(196,168,130,0.08)', pointerEvents: 'none', borderRadius: 2 }} />
+          )}
         </div>
 
         {/* Empty-canvas hint */}
@@ -379,12 +561,76 @@ export default function MindMap({ data, onChange, onClose }: Props) {
         )}
       </div>
 
+      {/* Edge color popover — rendered outside data-mind-world so `position: fixed`
+          anchors to the real viewport, not the pan/zoom-transformed world (a
+          transformed ancestor turns `fixed` descendants into pseudo-absolute
+          within it). */}
+      {edgeColorPickerFor && (() => {
+        const geom = segs.find(s => s.edge.id === edgeColorPickerFor)
+        if (!geom) return null
+        const screenPt = worldToScreen(geom.colorPos.x, geom.colorPos.y + 14)
+        return (
+          <ColorSwatchPicker
+            value={geom.edge.color || '#6b6058'}
+            onChange={c => setEdgeColor(geom.edge.id, c)}
+            onClose={() => setEdgeColorPickerFor(null)}
+            onReset={() => { setEdgeColor(geom.edge.id, undefined); setEdgeColorPickerFor(null) }}
+            style={{ left: screenPt.x, top: screenPt.y }}
+          />
+        )
+      })()}
+
+      {/* Single-bubble color popover — same "outside the transform" reasoning as above */}
+      {nodeColorPickerFor && (() => {
+        const n = data.nodes.find(nd => nd.id === nodeColorPickerFor)
+        if (!n) return null
+        const screenPt = worldToScreen(n.x, n.y)
+        return (
+          <ColorSwatchPicker
+            value={n.color}
+            onChange={c => updateNode(n.id, { color: c })}
+            onClose={() => setNodeColorPickerFor(null)}
+            style={{ left: screenPt.x, top: screenPt.y + 26 }}
+          />
+        )
+      })()}
+
+      {/* Multi-select toolbar */}
+      {selected.size > 0 && (
+        <div style={{ position: 'absolute', top: 54, left: '50%', transform: 'translateX(-50%)', display: 'flex', alignItems: 'center', gap: 8,
+          background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 8, padding: '6px 10px', boxShadow: '0 8px 24px rgba(0,0,0,0.4)', zIndex: 40 }}>
+          <span style={{ fontFamily: '"JetBrains Mono", monospace', fontSize: 11, color: 'var(--text2)' }}>{selected.size} selected</span>
+          <div style={{ position: 'relative' }}>
+            <div onMouseDown={e => { e.stopPropagation(); setBulkColorPickerOpen(o => !o) }} title="Recolor selection"
+              style={{ width: 20, height: 20, borderRadius: '50%', background: 'var(--accent)', border: '1px solid var(--border)', cursor: 'pointer' }} />
+          </div>
+          <Btn onClick={bulkDelete}>Delete</Btn>
+        </div>
+      )}
+      {bulkColorPickerOpen && selected.size > 0 && (
+        <ColorSwatchPicker
+          value={data.nodes.find(n => selected.has(n.id))?.color || MIND_COLORS[0]}
+          onChange={bulkSetColor}
+          onClose={() => setBulkColorPickerOpen(false)}
+          style={{ top: 90, left: '50%', transform: 'translateX(-50%)' }}
+        />
+      )}
+
       {/* Top toolbar */}
       <div style={{ position: 'absolute', top: 14, left: 14, right: 14, display: 'flex', alignItems: 'center', gap: 8 }}>
         <span style={{ fontFamily: '"Playfair Display", serif', fontSize: 15, color: 'var(--accent)', fontStyle: 'italic', marginRight: 6 }}>Mind Map</span>
         <Btn onClick={addBubble} primary>+ Bubble</Btn>
         <Btn onClick={() => fileInputRef.current?.click()}>Image</Btn>
         <Btn onClick={doOpen}>Open</Btn>
+        <div style={{ position: 'relative' }}>
+          <Btn onClick={() => setImportOpen(o => !o)} active={importOpen}>Import ▾</Btn>
+          {importOpen && (
+            <div style={{ position: 'absolute', top: 'calc(100% + 6px)', left: 0, background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 8, padding: 4, minWidth: 220, boxShadow: '0 8px 28px rgba(0,0,0,0.45)', zIndex: 20 }}>
+              <MenuItem title="Ideas" sub={`${ideationNotes.length} idea${ideationNotes.length === 1 ? '' : 's'} from Stage 1`} onClick={() => { setImportOpen(false); importIdeas() }} />
+              <MenuItem title="Notes panel" sub={`${notesSections.length} section${notesSections.length === 1 ? '' : 's'} from the Notes tab`} onClick={() => { setImportOpen(false); importNotesSections() }} />
+            </div>
+          )}
+        </div>
         <div style={{ position: 'relative' }}>
           <Btn onClick={() => setExportOpen(o => !o)} active={exportOpen}>Export ▾</Btn>
           {exportOpen && (
@@ -400,8 +646,8 @@ export default function MindMap({ data, onChange, onClose }: Props) {
         <Btn onClick={onClose}>Close ✕</Btn>
       </div>
 
-      {/* Close the export menu when clicking elsewhere */}
-      {exportOpen && <div onMouseDown={() => setExportOpen(false)} style={{ position: 'fixed', inset: 0, zIndex: 10 }} />}
+      {/* Close the export/import menus when clicking elsewhere */}
+      {(exportOpen || importOpen) && <div onMouseDown={() => { setExportOpen(false); setImportOpen(false) }} style={{ position: 'fixed', inset: 0, zIndex: 10 }} />}
 
       {toast && (
         <div style={{ position: 'absolute', top: 64, left: '50%', transform: 'translateX(-50%)', background: 'var(--surface)', border: '1px solid var(--border)', color: 'var(--text)', padding: '8px 16px', borderRadius: 8, fontFamily: '"JetBrains Mono", monospace', fontSize: 11, letterSpacing: '0.05em', boxShadow: '0 6px 24px rgba(0,0,0,0.4)' }}>
@@ -411,7 +657,7 @@ export default function MindMap({ data, onChange, onClose }: Props) {
 
       {/* Hint */}
       <div style={{ position: 'absolute', bottom: 16, left: 16, ...labelStyle, fontSize: 10, color: 'var(--text2)', pointerEvents: 'none', lineHeight: 1.6 }}>
-        Drag the ◦ handle from a bubble to connect · drag canvas to pan · scroll to zoom · click a line then Del to remove
+        Drag the ◦ handle to connect · double-click a line to bend it · Shift+drag to multi-select · drag canvas to pan · scroll to zoom
       </div>
 
       <input ref={fileInputRef} type="file" accept="image/*" style={{ display: 'none' }} onChange={onPickImage} />
@@ -449,14 +695,15 @@ function MenuItem({ title, sub, onClick }: { title: string; sub: string; onClick
 }
 
 // A single bubble. Measures its own height so connecting lines anchor correctly.
-function NodeCard({ node, onMeasure, onHeaderDown, onConnectDown, onText, onColor, onRemove }: {
+function NodeCard({ node, selected, onMeasure, onHeaderDown, onConnectDown, onText, onColorDotDown, onRemove }: {
   node: MindNode
   height: number
+  selected: boolean
   onMeasure: (id: string, h: number) => void
   onHeaderDown: (e: ReactMouseEvent) => void
   onConnectDown: (e: ReactMouseEvent) => void
   onText: (t: string) => void
-  onColor: (c: string) => void
+  onColorDotDown: (e: ReactMouseEvent) => void
   onRemove: () => void
 }) {
   const ref = useRef<HTMLDivElement>(null)
@@ -479,15 +726,15 @@ function NodeCard({ node, onMeasure, onHeaderDown, onConnectDown, onText, onColo
       onMouseEnter={() => setHover(true)}
       onMouseLeave={() => setHover(false)}
       style={{ position: 'absolute', left: node.x, top: node.y, width: node.width, background: node.color,
-        borderRadius: 8, boxShadow: '0 4px 18px rgba(0,0,0,0.28)', display: 'flex', flexDirection: 'column' }}
+        borderRadius: 8,
+        transform: node.rotation ? `rotate(${node.rotation}deg)` : undefined,
+        boxShadow: selected ? '0 0 0 2.5px var(--accent), 0 4px 18px rgba(0,0,0,0.28)' : '0 4px 18px rgba(0,0,0,0.28)',
+        display: 'flex', flexDirection: 'column' }}
     >
       <div onMouseDown={onHeaderDown}
         style={{ display: 'flex', alignItems: 'center', gap: 4, padding: '4px 6px', cursor: 'grab', background: 'rgba(0,0,0,0.06)', borderRadius: '8px 8px 0 0' }}>
-        <div onMouseDown={e => e.stopPropagation()} title="Bubble colour"
-          style={{ width: 13, height: 13, borderRadius: '50%', background: node.color, border: '1.5px solid rgba(0,0,0,0.25)', position: 'relative', overflow: 'hidden', flexShrink: 0 }}>
-          <input type="color" value={node.color} onChange={e => onColor(e.target.value)}
-            style={{ position: 'absolute', inset: -4, opacity: 0, cursor: 'pointer', width: '200%', height: '200%' }} />
-        </div>
+        <div onMouseDown={onColorDotDown} title="Bubble colour"
+          style={{ width: 13, height: 13, borderRadius: '50%', background: node.color, border: '1.5px solid rgba(0,0,0,0.25)', cursor: 'pointer', flexShrink: 0 }} />
         <div style={{ flex: 1 }} />
         <button onMouseDown={e => { e.stopPropagation(); e.preventDefault(); onRemove() }} title="Delete bubble"
           style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: 11, color: 'rgba(0,0,0,0.4)', lineHeight: 1, fontFamily: 'monospace' }}>✕</button>
