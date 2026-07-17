@@ -73,7 +73,7 @@ export default function BubbleToolbar({ editor, onTriggerComment }: BubbleToolba
       title={title}
       style={{
         background: active ? 'rgba(196,168,130,0.25)' : 'none',
-        border: 'none', color: active ? '#c4a882' : '#e8e2d9',
+        border: 'none', color: active ? 'var(--accent)' : 'var(--text)',
         cursor: 'pointer', padding: '4px 7px', borderRadius: 3,
         fontSize: 12, fontFamily: '"JetBrains Mono", monospace',
         whiteSpace: 'nowrap' as const, flexShrink: 0,
@@ -81,7 +81,7 @@ export default function BubbleToolbar({ editor, onTriggerComment }: BubbleToolba
     >{labelStyle ? <span style={labelStyle}>{label}</span> : label}</button>
   )
 
-  const sep = () => <div style={{ width: 1, height: 16, background: 'rgba(255,255,255,0.12)', margin: '0 2px', flexShrink: 0 }} />
+  const sep = () => <div style={{ width: 1, height: 16, background: 'var(--border)', margin: '0 2px', flexShrink: 0 }} />
 
   const dd = (
     label: string,
@@ -92,15 +92,15 @@ export default function BubbleToolbar({ editor, onTriggerComment }: BubbleToolba
     <div style={{ position: 'relative', flexShrink: 0 }}>
       <button
         onMouseDown={e => { e.preventDefault(); closeAll(); if (!open) toggle() }}
-        style={{ background: open ? 'rgba(196,168,130,0.2)' : 'none', border: 'none', color: '#e8e2d9', cursor: 'pointer', padding: '4px 7px', borderRadius: 3, fontSize: 11, fontFamily: '"JetBrains Mono",monospace', display: 'flex', alignItems: 'center', gap: 3, whiteSpace: 'nowrap' as const }}
+        style={{ background: open ? 'rgba(196,168,130,0.2)' : 'none', border: 'none', color: 'var(--text)', cursor: 'pointer', padding: '4px 7px', borderRadius: 3, fontSize: 11, fontFamily: '"JetBrains Mono",monospace', display: 'flex', alignItems: 'center', gap: 3, whiteSpace: 'nowrap' as const }}
       >
         {label} <span style={{ fontSize: 7, opacity: 0.5 }}>▼</span>
       </button>
       {open && (
-        <div style={{ position: 'absolute', top: '100%', left: 0, marginTop: 4, background: '#1a1814', border: '1px solid #3a3630', borderRadius: 6, padding: 4, zIndex: 500, minWidth: 150, maxHeight: 200, overflowY: 'auto', boxShadow: '0 8px 24px rgba(0,0,0,0.7)' }}>
+        <div style={{ position: 'absolute', top: '100%', left: 0, marginTop: 4, background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 6, padding: 4, zIndex: 500, minWidth: 150, maxHeight: 200, overflowY: 'auto', boxShadow: '0 8px 24px rgba(0,0,0,0.7)' }}>
           {items.map(item => (
             <button key={item.label} onMouseDown={e => { e.preventDefault(); item.action(); closeAll() }}
-              style={{ display: 'block', width: '100%', background: 'none', border: 'none', color: '#e8e2d9', cursor: 'pointer', padding: '6px 10px', textAlign: 'left', borderRadius: 4, fontSize: 13, ...item.style }}
+              style={{ display: 'block', width: '100%', background: 'none', border: 'none', color: 'var(--text)', cursor: 'pointer', padding: '6px 10px', textAlign: 'left', borderRadius: 4, fontSize: 13, ...item.style }}
               onMouseOver={e => e.currentTarget.style.background = 'rgba(196,168,130,0.12)'}
               onMouseOut={e => e.currentTarget.style.background = 'none'}
             >{item.label}</button>
@@ -111,7 +111,7 @@ export default function BubbleToolbar({ editor, onTriggerComment }: BubbleToolba
   )
 
   return (
-    <div ref={ref} style={{ position: 'fixed', left: x, top: y, zIndex: 400, background: '#1a1814', border: '1px solid #3a3630', borderRadius: 8, padding: '4px 6px', display: 'flex', alignItems: 'center', gap: 2, boxShadow: '0 4px 20px rgba(0,0,0,0.7)', userSelect: 'none' as const }}>
+    <div ref={ref} style={{ position: 'fixed', left: x, top: y, zIndex: 400, background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 8, padding: '4px 6px', display: 'flex', alignItems: 'center', gap: 2, boxShadow: '0 4px 20px rgba(0,0,0,0.7)', userSelect: 'none' as const }}>
       {dd(editor.getAttributes('textStyle').fontFamily?.split(',')[0]?.replace(/"/g,'') || 'Font', showFonts, () => setShowFonts(f => !f), FONTS.map(f => ({ label: f, action: () => editor.chain().focus().setFontFamily(f).run(), style: { fontFamily: f } })))}
       {sep()}
       {dd((editor.getAttributes('textStyle').fontSize?.replace('px','') || '—') + 'px', showSizes, () => setShowSizes(s => !s), SIZES.map(s => ({ label: s + 'px', action: () => editor.chain().focus().setMark('textStyle', { fontSize: s + 'px' }).run() })))}
@@ -142,9 +142,9 @@ export default function BubbleToolbar({ editor, onTriggerComment }: BubbleToolba
         data-comment-trigger
         onMouseDown={e => { e.preventDefault(); onTriggerComment() }}
         title="Add comment (Ctrl+M)"
-        style={{ background: 'none', border: 'none', color: '#e8e2d9', cursor: 'pointer', padding: '4px 7px', borderRadius: 3, fontSize: 11, fontFamily: '"JetBrains Mono", monospace', whiteSpace: 'nowrap', flexShrink: 0 }}
-        onMouseOver={e => e.currentTarget.style.color = 'white'}
-        onMouseOut={e => e.currentTarget.style.color = '#e8e2d9'}
+        style={{ background: 'none', border: 'none', color: 'var(--text)', cursor: 'pointer', padding: '4px 7px', borderRadius: 3, fontSize: 11, fontFamily: '"JetBrains Mono", monospace', whiteSpace: 'nowrap', flexShrink: 0 }}
+        onMouseOver={e => e.currentTarget.style.color = 'var(--accent)'}
+        onMouseOut={e => e.currentTarget.style.color = 'var(--text)'}
       >⌥ Comment</button>
     </div>
   )

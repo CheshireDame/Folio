@@ -54,22 +54,22 @@ export default function ImageToolbar({ editor, selectedImg, onClose }: ImageTool
       title={title || label}
       style={{
         background: active ? 'rgba(196,168,130,0.25)' : 'none',
-        border: 'none', color: active ? '#c4a882' : '#e8e2d9',
+        border: 'none', color: active ? 'var(--accent)' : 'var(--text)',
         cursor: 'pointer', padding: '4px 8px', borderRadius: 3,
         fontSize: 11, fontFamily: '"JetBrains Mono", monospace',
         whiteSpace: 'nowrap' as const, flexShrink: 0,
       }}
-      onMouseOver={e => { if (!active) e.currentTarget.style.color = 'white' }}
-      onMouseOut={e => { if (!active) e.currentTarget.style.color = '#e8e2d9' }}
+      onMouseOver={e => { if (!active) e.currentTarget.style.color = 'var(--accent)' }}
+      onMouseOut={e => { if (!active) e.currentTarget.style.color = 'var(--text)' }}
     >{label}</button>
   )
 
   const sep = () => (
-    <div style={{ width: 1, height: 16, background: 'rgba(255,255,255,0.15)', margin: '0 3px', flexShrink: 0 }} />
+    <div style={{ width: 1, height: 16, background: 'var(--border)', margin: '0 3px', flexShrink: 0 }} />
   )
 
   const lbl = (text: string) => (
-    <span style={{ fontFamily: '"JetBrains Mono", monospace', fontSize: 9, color: '#6b6058', textTransform: 'uppercase' as const, letterSpacing: '0.08em', padding: '0 4px', flexShrink: 0 }}>
+    <span style={{ fontFamily: '"JetBrains Mono", monospace', fontSize: 9, color: 'var(--text3)', textTransform: 'uppercase' as const, letterSpacing: '0.08em', padding: '0 4px', flexShrink: 0 }}>
       {text}
     </span>
   )
@@ -84,7 +84,7 @@ export default function ImageToolbar({ editor, selectedImg, onClose }: ImageTool
       ref={ref}
       style={{
         position: 'fixed', left: x, top: y, zIndex: 500,
-        background: '#1a1814', border: '1px solid #3a3630',
+        background: 'var(--surface)', border: '1px solid var(--border)',
         borderRadius: 8, padding: '5px 8px',
         display: 'flex', alignItems: 'center', gap: 2,
         boxShadow: '0 4px 24px rgba(0,0,0,0.8)',

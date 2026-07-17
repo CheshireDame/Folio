@@ -45,7 +45,7 @@ export default function SidePanel({
   const tabs = ['notes', 'comments', 'drafts'] as const
 
   return (
-    <div style={{ width: 300, borderLeft: '1px solid var(--border)', background: 'var(--surface)', display: 'flex', flexDirection: 'column', flexShrink: 0 }}>
+    <div style={{ width: 300, borderLeft: '1px solid var(--border)', background: 'var(--menu-bg)', display: 'flex', flexDirection: 'column', flexShrink: 0, '--text': 'var(--menu-text)', '--text2': 'var(--menu-text2)', '--text3': 'var(--menu-text3)' } as React.CSSProperties}>
       {/* Tabs */}
       <div style={{ display: 'flex', borderBottom: '1px solid var(--border)', flexShrink: 0 }}>
         {tabs.map(tab => (

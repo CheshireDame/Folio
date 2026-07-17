@@ -1,8 +1,8 @@
+import { parseHtmlInert } from './export'
 
 // RTF conversion -- works without external libs for our formatting needs
 export function htmlToRtf(html: string): string {
-  const tmp = document.createElement('div')
-  tmp.innerHTML = html
+  const tmp = parseHtmlInert(html)
 
   let rtf = '{\\rtf1\\ansi\\deff0'
   rtf += '{\\fonttbl{\\f0\\froman\\fcharset0 Crimson Pro;}{\\f1\\froman\\fcharset0 Georgia;}}'
@@ -44,8 +44,11 @@ export function htmlToRtf(html: string): string {
 
 export function rtfToHtml(rtf: string): string {
   // Basic RTF to HTML for loading saved files
-  // Strip RTF header and convert common control words
+  // Strip RTF header and convert common control words.
+  // Escape HTML entities first so file text can never smuggle markup — only
+  // the tags we construct below survive into the output.
   let text = rtf
+    .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
     .replace(/\{\\rtf[^}]*\}/g, '')
     .replace(/\{\\fonttbl[^}]*\}/g, '')
     .replace(/\{\\colortbl[^}]*\}/g, '')

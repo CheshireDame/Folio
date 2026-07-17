@@ -75,7 +75,7 @@ function ImageView({ node, updateAttributes, deleteNode }: any) {
       title={title || label}
       style={{
         background: active ? 'rgba(196,168,130,0.25)' : 'none',
-        border: 'none', color: active ? '#c4a882' : '#e8e2d9',
+        border: 'none', color: active ? 'var(--accent)' : 'var(--text)',
         cursor: 'pointer', padding: '3px 7px', borderRadius: 3,
         fontSize: 10, fontFamily: '"JetBrains Mono", monospace',
         whiteSpace: 'nowrap' as const, flexShrink: 0,
@@ -83,10 +83,10 @@ function ImageView({ node, updateAttributes, deleteNode }: any) {
     >{label}</button>
   )
 
-  const sep = () => <div style={{ width: 1, height: 14, background: 'rgba(255,255,255,0.15)', margin: '0 2px', flexShrink: 0 }} />
+  const sep = () => <div style={{ width: 1, height: 14, background: 'var(--border)', margin: '0 2px', flexShrink: 0 }} />
 
   const lbl = (t: string) => (
-    <span style={{ fontFamily: '"JetBrains Mono", monospace', fontSize: 8, color: '#6b6058', textTransform: 'uppercase' as const, letterSpacing: '0.08em', padding: '0 3px', flexShrink: 0 }}>{t}</span>
+    <span style={{ fontFamily: '"JetBrains Mono", monospace', fontSize: 8, color: 'var(--text3)', textTransform: 'uppercase' as const, letterSpacing: '0.08em', padding: '0 3px', flexShrink: 0 }}>{t}</span>
   )
 
   const wrapStyle: React.CSSProperties = isFree ? {
@@ -143,7 +143,7 @@ function ImageView({ node, updateAttributes, deleteNode }: any) {
               left: Math.max(8, Math.min(toolbarRect.left + toolbarRect.width / 2 - 240, window.innerWidth - 488)),
               top: Math.max(8, toolbarRect.top - 46),
               zIndex: 1000,
-              background: '#1a1814', border: '1px solid #3a3630',
+              background: 'var(--surface)', border: '1px solid var(--border)',
               borderRadius: 7, padding: '4px 6px',
               display: 'flex', alignItems: 'center', gap: 2,
               boxShadow: '0 4px 20px rgba(0,0,0,0.8)',

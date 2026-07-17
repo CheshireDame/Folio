@@ -19,6 +19,8 @@
   --toolbar: #15130f;
   --toolbar-opacity: 0.9;
   --accent: #c4a882;
+  --scrollbar-thumb: #4a443c;
+  --scrollbar-thumb-hover: #635c52;
 }
 
 * { box-sizing: border-box; margin: 0; padding: 0; }
@@ -39,7 +41,7 @@ body {
   border: none !important;
   box-shadow: none !important;
   color: var(--text);
-  font-family: 'Crimson Pro', Georgia, serif;
+  font-family: var(--editor-font-family, 'Crimson Pro', Georgia, serif);
   font-size: var(--editor-font-size, 20px);
   line-height: var(--editor-line-height, 1.85);
   min-height: 100%;
@@ -93,13 +95,14 @@ body {
 }
 
 ::-webkit-scrollbar { width: 6px; }
-::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
+::-webkit-scrollbar-thumb { background: var(--scrollbar-thumb, var(--border)); border-radius: 3px; }
+::-webkit-scrollbar-thumb:hover { background: var(--scrollbar-thumb-hover, var(--border)); }
 ::-webkit-scrollbar-track { background: transparent; }
 
 .folio-editor-wrap { scrollbar-width: none; }
 .folio-editor-wrap::-webkit-scrollbar { display: none; }
 
-.folio-editor-wrap.scrollbar-visible { scrollbar-width: thin; }
+.folio-editor-wrap.scrollbar-visible { scrollbar-width: thin; scrollbar-color: var(--scrollbar-thumb, var(--border)) transparent; }
 .folio-editor-wrap.scrollbar-visible::-webkit-scrollbar { display: block; }
 
 /* Toolbar transparency */

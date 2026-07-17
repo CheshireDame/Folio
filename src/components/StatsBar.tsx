@@ -24,7 +24,7 @@ export default function StatsBar({
   const smallBtn = (label: string, action: () => void) => (
     <button onClick={action} style={{
       background: 'none', border: 'none',
-      color: 'var(--text2)', cursor: 'pointer',
+      color: 'var(--toolbar-text)', cursor: 'pointer',
       padding: '2px 6px', borderRadius: 3,
       fontSize: 10, fontFamily: '"JetBrains Mono", monospace',
       textTransform: 'uppercase' as const, letterSpacing: '0.06em',
@@ -47,13 +47,13 @@ export default function StatsBar({
       fontSize: 11,
       overflowX: 'auto',
     }}>
-      <span style={{ color: 'var(--text3)', whiteSpace: 'nowrap' }}>
-        Words <span style={{ color: 'var(--text2)' }}>{words}</span>
+      <span style={{ color: 'var(--toolbar-text)', opacity: 0.82, whiteSpace: 'nowrap' }}>
+        Words <span style={{ color: 'var(--toolbar-text)', opacity: 1 }}>{words}</span>
       </span>
-      <span style={{ color: 'var(--text3)', whiteSpace: 'nowrap' }}>
-        Chars <span style={{ color: 'var(--text2)' }}>{chars}</span>
+      <span style={{ color: 'var(--toolbar-text)', opacity: 0.82, whiteSpace: 'nowrap' }}>
+        Chars <span style={{ color: 'var(--toolbar-text)', opacity: 1 }}>{chars}</span>
       </span>
-      <span style={{ color: 'var(--text3)', whiteSpace: 'nowrap', display: 'flex', alignItems: 'center', gap: 6 }}>
+      <span style={{ color: 'var(--toolbar-text)', opacity: 0.82, whiteSpace: 'nowrap', display: 'flex', alignItems: 'center', gap: 6 }}>
         Goal
         <input
           type="number"
@@ -62,12 +62,12 @@ export default function StatsBar({
           style={{
             background: 'transparent', border: 'none',
             borderBottom: '1px solid var(--border)',
-            color: 'var(--text2)', width: 50,
+            color: 'var(--toolbar-text)', opacity: 1, width: 50,
             fontFamily: '"JetBrains Mono", monospace', fontSize: 11,
             padding: '0 2px', outline: 'none',
           }}
         />
-        <span style={{ color: 'var(--text3)' }}>{pct}%</span>
+        <span style={{ color: 'var(--toolbar-text)', opacity: 0.82 }}>{pct}%</span>
       </span>
       <div style={{ flex: 1, maxWidth: 100, height: 2, background: 'var(--border)', borderRadius: 1 }}>
         <div style={{
@@ -77,7 +77,7 @@ export default function StatsBar({
         }} />
       </div>
       <div style={{ flex: 1 }} />
-      <span style={{ color: timerRunning ? 'var(--accent)' : 'var(--text3)' }}>
+      <span style={{ color: 'var(--toolbar-text)', opacity: timerRunning ? 1 : 0.82 }}>
         {fmt(timer)}
       </span>
       {!timerPopupOpen && smallBtn(timerRunning ? 'Pause' : 'Start', onTimerToggle)}

@@ -23,7 +23,7 @@ import BubbleToolbar from './components/BubbleToolbar'
 import FormattingBar from './components/FormattingBar'
 import SpacingPanel from './components/SpacingPanel'
 import GlyphPicker from './components/GlyphPicker'
-import { saveData, loadData, saveAudioTracks, loadAudioTracks, saveWorkspaceImages, loadWorkspaceImages, saveCustomKeySounds, loadCustomKeySounds, saveDocumentToFile, openDocumentFromFile, CustomTheme, StickyNote, AudioTrack, NoteSection, Comment, WorkspaceImage, CustomKeySounds } from './lib/storage'
+import { saveData, loadData, saveAudioTracks, loadAudioTracks, loadWorkspaceImages, saveCustomKeySounds, loadCustomKeySounds, saveDocumentToFile, openDocumentFromFile, CustomTheme, StickyNote, AudioTrack, NoteSection, Comment, WorkspaceImage, CustomKeySounds } from './lib/storage'
 import type { Draft as DraftType, Block } from './lib/storage'
 import { setCustomSound, previewSound, SoundType } from './lib/keyboardSounds'
 import { FontSize } from './lib/font-size'
@@ -33,6 +33,8 @@ import AudioPlayer from './components/AudioPlayer'
 import ExportModal from './components/ExportModal'
 import TimerPopup from './components/TimerPopup'
 import PostureToast from './components/PostureToast'
+import PosturePopup from './components/PosturePopup'
+import { playChime } from './lib/chime'
 import IdeationCanvas, { makeIdeationNote } from './components/IdeationCanvas'
 import BlockEditor from './components/BlockEditor'
 import MindMap from './components/MindMap'
@@ -72,10 +74,40 @@ function getLuminance(hex: string): number {
 }
 
 function darken(hex: string, amt = 0.35): string {
+  amt = Math.min(1, Math.max(0, amt))
   const r = parseInt(hex.slice(1,3),16)
   const g = parseInt(hex.slice(3,5),16)
   const b = parseInt(hex.slice(5,7),16)
   return '#' + [r,g,b].map(v => Math.round(v*(1-amt)).toString(16).padStart(2,'0')).join('')
+}
+
+function lighten(hex: string, amt = 0.35): string {
+  amt = Math.min(1, Math.max(0, amt))
+  const r = parseInt(hex.slice(1,3),16)
+  const g = parseInt(hex.slice(3,5),16)
+  const b = parseInt(hex.slice(5,7),16)
+  return '#' + [r,g,b].map(v => Math.round(v + (255-v)*amt).toString(16).padStart(2,'0')).join('')
+}
+
+function srgbToLinear(c: number): number {
+  const cs = c / 255
+  return cs <= 0.03928 ? cs / 12.92 : Math.pow((cs + 0.055) / 1.055, 2.4)
+}
+
+function relativeLuminance(hex: string): number {
+  const r = parseInt(hex.slice(1,3),16)
+  const g = parseInt(hex.slice(3,5),16)
+  const b = parseInt(hex.slice(5,7),16)
+  return 0.2126*srgbToLinear(r) + 0.7152*srgbToLinear(g) + 0.0722*srgbToLinear(b)
+}
+
+// WCAG contrast ratio (1–21). 4.5 is the "AA, normal text" bar.
+function contrastRatio(hexA: string, hexB: string): number {
+  const l1 = relativeLuminance(hexA)
+  const l2 = relativeLuminance(hexB)
+  const lighter = Math.max(l1, l2)
+  const darker = Math.min(l1, l2)
+  return (lighter + 0.05) / (darker + 0.05)
 }
 
 export default function App() {
@@ -118,7 +150,6 @@ const [showSettings, setShowSettings]     = useState(false)
   const [drafts, setDrafts]                 = useState<Record<string, DraftType>>({ untitled: { content: '', savedAt: new Date().toISOString() } })
   const [currentDraft, setCurrentDraft]     = useState('untitled')
   const [currentFilePath, setCurrentFilePath] = useState<string | null>(null)
-  const [notes, setNotes]                   = useState('')
   const [accentPresets, setAccentPresets]   = useState<string[]>([])
   const [bgPresets, setBgPresets]           = useState<string[]>([])
   const [customThemes, setCustomThemes]     = useState<CustomTheme[]>([])
@@ -129,6 +160,7 @@ const [showSettings, setShowSettings]     = useState(false)
   const [customKeySounds, setCustomKeySounds] = useState<CustomKeySounds>({ click: null, space: null, return: null, backspace: null })
   const [toolbarColor, setToolbarColor]     = useState('')
   const [toolbarTextColor, setToolbarTextColor] = useState('')
+  const [editorFontFamily, setEditorFontFamily] = useState('Crimson Pro')
   const [paragraphSpacing, setParagraphSpacing] = useState(0.8)
   const [showSpacing, setShowSpacing]       = useState(false)
   const [showGlyphs, setShowGlyphs]         = useState(false)
@@ -141,8 +173,10 @@ const [showSettings, setShowSettings]     = useState(false)
   const [showBuildPrompt, setShowBuildPrompt]     = useState(false)
   const [pendingStage, setPendingStage]           = useState<1 | 2 | 3 | null>(null)
   const [postureEnabled, setPostureEnabled] = useState(false)
-  const [postureInterval, setPostureInterval] = useState(30)
+  const [postureIntervalSec, setPostureIntervalSec] = useState(30 * 60)
+  const [postureSound, setPostureSound]     = useState(true)
   const [showPosture, setShowPosture]       = useState(false)
+  const [showPostureMenu, setShowPostureMenu] = useState(false)
   const [showMindMap, setShowMindMap]       = useState(false)
   const [mindMap, setMindMap]               = useState<MindMapData>(EMPTY_MIND_MAP)
 
@@ -178,7 +212,7 @@ const [showSettings, setShowSettings]     = useState(false)
 
   // Load on startup
   useEffect(() => {
-    loadData().then(data => {
+    Promise.all([loadData(), loadWorkspaceImages()]).then(([data, legacyImages]) => {
       if (data) {
         setThemeIdx(data.settings.themeIdx ?? 0)
         setAccentColor(data.settings.accentColor ?? '#c4a882')
@@ -187,15 +221,36 @@ const [showSettings, setShowSettings]     = useState(false)
         setEditorWidth(data.settings.editorWidth ?? 680)
         setLineHeight(data.settings.lineHeight ?? 1.85)
         setWordGoal(data.settings.wordGoal ?? 500)
-setShowFormattingBar(data.settings.showFormattingBar ?? true)
+        setShowFormattingBar(data.settings.showFormattingBar ?? true)
         setShowScrollbar(data.settings.showScrollbar ?? false)
         setCanvasAlign(data.settings.canvasAlign ?? 'center')
-        setStickyNotes(data.stickyNotes ?? [])
-        setNotesSections(data.notesSections ?? [])
-        setComments(data.comments ?? [])
-        setDrafts(data.drafts ?? { untitled: { content: '', savedAt: new Date().toISOString() } })
-        setCurrentDraft(data.currentDraft ?? 'untitled')
-        setNotes(data.notes ?? '')
+
+        const cd = data.currentDraft ?? 'untitled'
+        let loadedDrafts = data.drafts ?? { untitled: { content: '', savedAt: new Date().toISOString() } }
+        if (!loadedDrafts[cd]) loadedDrafts = { ...loadedDrafts, [cd]: { content: '' } }
+        const cdDraft = loadedDrafts[cd]
+        // One-time migration: older versions stored notes/images globally instead of per-draft.
+        const isUnmigrated = cdDraft.stickyNotes === undefined && cdDraft.notesSections === undefined
+          && cdDraft.comments === undefined && cdDraft.workspaceImages === undefined
+        if (isUnmigrated && (data.stickyNotes?.length || data.notesSections?.length || data.comments?.length || legacyImages.length)) {
+          loadedDrafts = {
+            ...loadedDrafts,
+            [cd]: {
+              ...cdDraft,
+              stickyNotes: data.stickyNotes ?? [],
+              notesSections: data.notesSections ?? [],
+              comments: data.comments ?? [],
+              workspaceImages: legacyImages,
+            },
+          }
+        }
+        setDrafts(loadedDrafts)
+        setCurrentDraft(cd)
+        setStickyNotes(loadedDrafts[cd].stickyNotes ?? [])
+        setNotesSections(loadedDrafts[cd].notesSections ?? [])
+        setComments(loadedDrafts[cd].comments ?? [])
+        setWorkspaceImages(loadedDrafts[cd].workspaceImages ?? [])
+
         setAccentPresets(data.settings.accentPresets ?? [])
         setBgPresets(data.settings.bgPresets ?? [])
         setCustomThemes(data.settings.customThemes ?? [])
@@ -206,14 +261,15 @@ setShowFormattingBar(data.settings.showFormattingBar ?? true)
         setKeySoundsVolume(data.settings.keySoundsVolume ?? 0.3)
         setToolbarColor(data.settings.toolbarColor ?? '')
         setToolbarTextColor(data.settings.toolbarTextColor ?? '')
+        setEditorFontFamily(data.settings.editorFontFamily ?? 'Crimson Pro')
         setParagraphSpacing(data.settings.paragraphSpacing ?? 0.8)
         setPostureEnabled(data.settings.postureEnabled ?? false)
-        setPostureInterval(data.settings.postureInterval ?? 30)
+        setPostureIntervalSec(data.settings.postureIntervalSec ?? (data.settings.postureInterval ? data.settings.postureInterval * 60 : 30 * 60))
+        setPostureSound(data.settings.postureSound ?? true)
       }
       setLoaded(true)
     })
     loadAudioTracks().then(setAudioTracks)
-    loadWorkspaceImages().then(setWorkspaceImages)
     loadCustomKeySounds().then(setCustomKeySounds)
     loadMindMap().then(setMindMap)
   }, [])
@@ -240,10 +296,38 @@ setShowFormattingBar(data.settings.showFormattingBar ?? true)
     r.setProperty('--text2',        theme.text2)
     r.setProperty('--text3',        theme.text3)
     r.setProperty('--border',       theme.border)
-    r.setProperty('--toolbar',      toolbarColor || theme.toolbar)
-    r.setProperty('--toolbar-text', toolbarTextColor || theme.text2)
+    const toolbarBase = toolbarColor || theme.toolbar
+    r.setProperty('--toolbar',      toolbarBase)
+    const toolbarIsLight = getLuminance(toolbarBase) > 0.5
+    const darkText = '#1f1c17'
+    const lightText = '#f2ede4'
+    // Toolbar text: honor a manual override, otherwise pick whichever extreme actually
+    // contrasts best against the toolbar color itself (a fixed muted gray reads fine on the
+    // default near-black toolbar but goes illegible once the toolbar color is customized).
+    const toolbarTextAuto = contrastRatio(toolbarBase, darkText) >= contrastRatio(toolbarBase, lightText) ? darkText : lightText
+    r.setProperty('--toolbar-text', toolbarTextColor || toolbarTextAuto)
     r.setProperty('--accent',       accentColor)
     r.setProperty('--accent2',      darken(accentColor))
+    // Small popups (timer, audio, posture, panel…) sit near the toolbar — toolbar color adaptation.
+    // Push the shade further from the toolbar (and re-check real WCAG contrast) until legible in
+    // every hue, since a fixed small offset reads fine on neutrals but goes muddy on saturated colors.
+    // Target AAA (7:1), not just AA, since muted secondary/tertiary text rides on top of this at
+    // reduced opacity and needs the extra headroom to stay readable.
+    let menuBg = toolbarIsLight ? darken(toolbarBase, 0.14) : lighten(toolbarBase, 0.22)
+    let bestRatio = Math.max(contrastRatio(menuBg, darkText), contrastRatio(menuBg, lightText))
+    for (let extra = 0.1; bestRatio < 7 && extra <= 0.8; extra += 0.1) {
+      menuBg = toolbarIsLight ? darken(toolbarBase, 0.14 + extra) : lighten(toolbarBase, 0.22 + extra)
+      bestRatio = Math.max(contrastRatio(menuBg, darkText), contrastRatio(menuBg, lightText))
+    }
+    r.setProperty('--menu-bg', menuBg)
+    // Scrollbar thumb tracks the toolbar color, pushed for contrast so it stays visible over the canvas
+    const scrollbarThumb = toolbarIsLight ? darken(toolbarBase, 0.3) : lighten(toolbarBase, 0.32)
+    r.setProperty('--scrollbar-thumb', scrollbarThumb)
+    r.setProperty('--scrollbar-thumb-hover', toolbarIsLight ? darken(toolbarBase, 0.45) : lighten(toolbarBase, 0.48))
+    const menuIsLight = contrastRatio(menuBg, darkText) >= contrastRatio(menuBg, lightText)
+    r.setProperty('--menu-text',  menuIsLight ? darkText : lightText)
+    r.setProperty('--menu-text2', menuIsLight ? 'rgba(31,28,23,0.82)' : 'rgba(242,237,228,0.82)')
+    r.setProperty('--menu-text3', menuIsLight ? 'rgba(31,28,23,0.65)' : 'rgba(242,237,228,0.65)')
     const effectiveBg = bgColor || theme.bg
     const lum = getLuminance(effectiveBg)
     r.setProperty('--placeholder-color', lum > 0.5 ? 'rgba(0,0,0,0.3)' : 'rgba(255,255,255,0.18)')
@@ -266,10 +350,12 @@ setShowFormattingBar(data.settings.showFormattingBar ?? true)
   // Font/line-height — CSS vars apply immediately; setAttribute is a fallback for inline specificity
   useEffect(() => {
     const r = document.documentElement.style
+    const fontStack = `"${editorFontFamily}", Georgia, serif`
     r.setProperty('--editor-font-size', `${fontSize}px`)
     r.setProperty('--editor-line-height', lineHeight.toString())
-    if (editor) editor.view.dom.setAttribute('style', `font-size:${fontSize}px;line-height:${lineHeight};`)
-  }, [fontSize, lineHeight, editor])
+    r.setProperty('--editor-font-family', fontStack)
+    if (editor) editor.view.dom.setAttribute('style', `font-size:${fontSize}px;line-height:${lineHeight};font-family:${fontStack};`)
+  }, [fontSize, lineHeight, editorFontFamily, editor])
 
   useEffect(() => {
     document.documentElement.style.setProperty('--paragraph-spacing', `${paragraphSpacing}em`)
@@ -279,11 +365,6 @@ setShowFormattingBar(data.settings.showFormattingBar ?? true)
   useEffect(() => {
     if (audioTracks.length > 0) saveAudioTracks(audioTracks)
   }, [audioTracks])
-
-  // Workspace images persistence
-  useEffect(() => {
-    saveWorkspaceImages(workspaceImages)
-  }, [workspaceImages])
 
   // Custom key sounds — decode data URLs into AudioBuffers whenever they change
   useEffect(() => {
@@ -329,9 +410,13 @@ setShowFormattingBar(data.settings.showFormattingBar ?? true)
     if (!loaded) return
     if (saveTimeout.current) clearTimeout(saveTimeout.current)
     saveTimeout.current = window.setTimeout(() => {
-      saveData({ drafts, currentDraft, notes, notesSections, comments, stickyNotes, settings: { themeIdx, accentColor, bgColor, bgImage, bgBlur, bgDim, fontSize, editorWidth, lineHeight, wordGoal, showFormattingBar, canvasPadding, accentPresets, bgPresets, customThemes, showScrollbar, canvasAlign, spellCheckLang, imageMode, keySounds, keySoundsVolume, toolbarColor, toolbarTextColor, paragraphSpacing, postureEnabled, postureInterval } })
+      const draftsWithExtras = {
+        ...drafts,
+        [currentDraft]: { ...drafts[currentDraft], stickyNotes, notesSections, comments, workspaceImages },
+      }
+      saveData({ drafts: draftsWithExtras, currentDraft, settings: { themeIdx, accentColor, bgColor, bgImage, bgBlur, bgDim, fontSize, editorWidth, lineHeight, wordGoal, showFormattingBar, canvasPadding, accentPresets, bgPresets, customThemes, showScrollbar, canvasAlign, spellCheckLang, imageMode, keySounds, keySoundsVolume, toolbarColor, toolbarTextColor, editorFontFamily, paragraphSpacing, postureEnabled, postureIntervalSec, postureSound } })
     }, 1500)
-  }, [drafts, currentDraft, notes, themeIdx, accentColor, bgColor, fontSize, editorWidth, lineHeight, wordGoal, loaded, toolbarColor, toolbarTextColor, paragraphSpacing])
+  }, [drafts, currentDraft, stickyNotes, notesSections, comments, workspaceImages, themeIdx, accentColor, bgColor, fontSize, editorWidth, lineHeight, wordGoal, loaded, toolbarColor, toolbarTextColor, editorFontFamily, paragraphSpacing, postureEnabled, postureIntervalSec, postureSound])
 
   const toggleFocusMode = useCallback(() => {
     if (!document.fullscreenElement) {
@@ -400,12 +485,23 @@ setShowFormattingBar(data.settings.showFormattingBar ?? true)
     setPendingStage(null)
   }, [drafts, currentDraft, editor, patchDraft, pendingStage])
 
+  // Snapshots the in-memory notes/images (which belong to currentDraft) back into `drafts`.
+  const snapshotCurrentDraft = useCallback((): Record<string, DraftType> => ({
+    ...drafts,
+    [currentDraft]: {
+      ...drafts[currentDraft],
+      content: editor ? editor.getHTML() : (drafts[currentDraft]?.content ?? ''),
+      savedAt: new Date().toISOString(),
+      stickyNotes, notesSections, comments, workspaceImages,
+    },
+  }), [drafts, currentDraft, editor, stickyNotes, notesSections, comments, workspaceImages])
+
   const saveDraft = useCallback(() => {
     if (!editor) return
-    const updated = { ...drafts, [currentDraft]: { ...drafts[currentDraft], content: editor.getHTML(), savedAt: new Date().toISOString() } }
+    const updated = snapshotCurrentDraft()
     setDrafts(updated)
-    saveData({ drafts: updated, currentDraft, notes, settings: { themeIdx, accentColor, bgColor, fontSize, editorWidth, lineHeight, wordGoal } })
-  }, [editor, currentDraft, drafts, notes, themeIdx, accentColor, bgColor, fontSize, editorWidth, lineHeight, wordGoal])
+    saveData({ drafts: updated, currentDraft, settings: { themeIdx, accentColor, bgColor, fontSize, editorWidth, lineHeight, wordGoal } })
+  }, [editor, currentDraft, snapshotCurrentDraft, themeIdx, accentColor, bgColor, fontSize, editorWidth, lineHeight, wordGoal])
 
   const saveToFile = useCallback(async () => {
     if (!editor) return
@@ -414,16 +510,27 @@ setShowFormattingBar(data.settings.showFormattingBar ?? true)
     if (path) setCurrentFilePath(path)
   }, [editor, currentDraft, currentFilePath, saveDraft])
 
+  // Persists the outgoing draft's notes/images, then swaps the editor and note/image
+  // state over to `name` so each draft keeps its own notes and images.
+  const switchToDraft = useCallback((name: string, overrides?: Partial<DraftType>) => {
+    const base = snapshotCurrentDraft()
+    const merged = overrides ? { ...base, [name]: { ...base[name], ...overrides } } : base
+    setDrafts(merged)
+    setCurrentDraft(name)
+    const target = merged[name] ?? { content: '' }
+    editor?.commands.setContent(target.content || '')
+    setStickyNotes(target.stickyNotes ?? [])
+    setNotesSections(target.notesSections ?? [])
+    setComments(target.comments ?? [])
+    setWorkspaceImages(target.workspaceImages ?? [])
+  }, [snapshotCurrentDraft, editor])
+
   const openFile = useCallback(async () => {
     const result = await openDocumentFromFile()
     if (!result) return
-    saveDraft()
-    const draftName = result.title
-    setDrafts(d => ({ ...d, [draftName]: { ...d[draftName], content: result.content, savedAt: new Date().toISOString() } }))
-    setCurrentDraft(draftName)
+    switchToDraft(result.title, { content: result.content, savedAt: new Date().toISOString() })
     setCurrentFilePath(result.path)
-    editor?.commands.setContent(result.content)
-  }, [editor, saveDraft])
+  }, [switchToDraft])
 
   // Keyboard shortcuts
   useEffect(() => {
@@ -452,34 +559,55 @@ setShowFormattingBar(data.settings.showFormattingBar ?? true)
   // Posture reminder
   useEffect(() => {
     if (!postureEnabled) return
-    const id = window.setInterval(() => setShowPosture(true), postureInterval * 60 * 1000)
+    const id = window.setInterval(() => {
+      setShowPosture(true)
+      if (postureSound) playChime(0.5)
+    }, postureIntervalSec * 1000)
     return () => clearInterval(id)
-  }, [postureEnabled, postureInterval])
+  }, [postureEnabled, postureIntervalSec, postureSound])
 
   const loadDraft = (name: string) => {
-    saveDraft()
-    setCurrentDraft(name)
+    switchToDraft(name)
     setCurrentFilePath(null)
-    editor?.commands.setContent(drafts[name]?.content || '')
   }
 
   const newDraft = () => {
     const name = prompt('Draft name:')
     if (!name) return
-    saveDraft()
-    setDrafts(d => ({ ...d, [name]: { content: '', savedAt: new Date().toISOString() } }))
-    setCurrentDraft(name)
+    switchToDraft(name, { content: '', savedAt: new Date().toISOString(), stickyNotes: [], notesSections: [], comments: [], workspaceImages: [] })
     setCurrentFilePath(null)
-    editor?.commands.clearContent()
   }
 
   const deleteDraft = (name: string) => {
     if (!confirm(`Delete "${name}"? This cannot be undone.`)) return
     const remaining = Object.keys(drafts).filter(k => k !== name)
-    setDrafts(d => { const n = {...d}; delete n[name]; return n })
-    if (currentDraft === name) {
-      if (remaining.length) loadDraft(remaining[remaining.length - 1])
-      else { setCurrentDraft('untitled'); setDrafts({ untitled: { content: '', savedAt: new Date().toISOString() } }); editor?.commands.clearContent() }
+    const withoutDeleted = { ...drafts }
+    delete withoutDeleted[name]
+    if (currentDraft !== name) {
+      setDrafts(withoutDeleted)
+      return
+    }
+    // Switch away without persisting the deleted draft's notes/images.
+    if (remaining.length) {
+      const next = remaining[remaining.length - 1]
+      const target = withoutDeleted[next]
+      setDrafts(withoutDeleted)
+      setCurrentDraft(next)
+      setCurrentFilePath(null)
+      editor?.commands.setContent(target?.content || '')
+      setStickyNotes(target?.stickyNotes ?? [])
+      setNotesSections(target?.notesSections ?? [])
+      setComments(target?.comments ?? [])
+      setWorkspaceImages(target?.workspaceImages ?? [])
+    } else {
+      setDrafts({ untitled: { content: '', savedAt: new Date().toISOString() } })
+      setCurrentDraft('untitled')
+      setCurrentFilePath(null)
+      editor?.commands.clearContent()
+      setStickyNotes([])
+      setNotesSections([])
+      setComments([])
+      setWorkspaceImages([])
     }
   }
 
@@ -577,6 +705,7 @@ const handleImageFile = (e: React.ChangeEvent<HTMLInputElement>) => {
           showGlyphs={showGlyphs}  onToggleGlyphs={() => { setShowGlyphs(g => !g); setShowSpacing(false) }}
           currentStage={currentStage} onStageChange={handleStageChange}
           onOpenMindMap={() => setShowMindMap(true)}
+          postureEnabled={postureEnabled} postureMenuOpen={showPostureMenu} onTogglePosture={() => setShowPostureMenu(m => !m)}
         />
         <FormattingBar editor={editor} visible={showFormattingBar} />
         {showSpacing && (
@@ -707,6 +836,14 @@ WebkitBackdropFilter: canvasBlur > 0 ? 'blur(' + canvasBlur + 'px)' : undefined,
         />
       )}
       {showPosture && <PostureToast onDismiss={() => setShowPosture(false)} />}
+      {showPostureMenu && (
+        <PosturePopup
+          enabled={postureEnabled} onToggleEnabled={() => setPostureEnabled(p => !p)}
+          intervalSec={postureIntervalSec} onIntervalSecChange={setPostureIntervalSec}
+          sound={postureSound} onToggleSound={() => setPostureSound(s => !s)}
+          onClose={() => setShowPostureMenu(false)}
+        />
+      )}
 
       {showMindMap && (
         <MindMap
@@ -776,11 +913,14 @@ WebkitBackdropFilter: canvasBlur > 0 ? 'blur(' + canvasBlur + 'px)' : undefined,
           text2: theme.text2, text3: theme.text3, border: theme.border,
           toolbar: theme.toolbar, accent: accentColor,
           bgImage, bgBlur, bgDim,
+          toolbarColor, toolbarTextColor, editorFontFamily,
         }])}
         onDeleteCustomTheme={(i: number) => setCustomThemes(p => p.filter((_, idx) => idx !== i))}
         onApplyCustomTheme={(t: CustomTheme) => {
           setBgColor(t.bg); setAccentColor(t.accent)
           setBgImage(t.bgImage); setBgBlur(t.bgBlur); setBgDim(t.bgDim)
+          setToolbarColor(t.toolbarColor ?? ''); setToolbarTextColor(t.toolbarTextColor ?? '')
+          setEditorFontFamily(t.editorFontFamily || 'Crimson Pro')
         }}
         keySounds={keySounds} onKeySounds={setKeySounds}
         keySoundsVolume={keySoundsVolume} onKeySoundsVolume={setKeySoundsVolume}
@@ -789,8 +929,7 @@ WebkitBackdropFilter: canvasBlur > 0 ? 'blur(' + canvasBlur + 'px)' : undefined,
         onPreviewSound={(type) => previewSound(type, keySoundsVolume)}
         toolbarColor={toolbarColor} onToolbarColor={setToolbarColor}
         toolbarTextColor={toolbarTextColor} onToolbarTextColor={setToolbarTextColor}
-        postureEnabled={postureEnabled} onPostureEnabled={setPostureEnabled}
-        postureInterval={postureInterval} onPostureInterval={setPostureInterval}
+        editorFontFamily={editorFontFamily} onEditorFontFamily={setEditorFontFamily}
       />
       <ExportModal
         open={showExport}
@@ -812,4 +951,3 @@ WebkitBackdropFilter: canvasBlur > 0 ? 'blur(' + canvasBlur + 'px)' : undefined,
     </div>
   )
 }
-// pookie said I should have " respect for the craft" and write this along with descriptions to keep track of my updates or some other bullshit you say when you're in a godless country ruled by a monarchy idk I get bitches

@@ -43,10 +43,11 @@ export default function TimerPopup({ timer, running, onToggle, onReset, onClose 
     <div
       style={{
         position: 'fixed', left: pos.x, top: pos.y, zIndex: 300,
-        background: 'var(--surface)', border: '1px solid var(--border)',
+        background: 'var(--menu-bg)', border: '1px solid var(--border)',
         borderRadius: 12, boxShadow: '0 8px 40px rgba(0,0,0,0.6)',
         width: 280, userSelect: 'none',
-      }}
+        '--text': 'var(--menu-text)', '--text2': 'var(--menu-text2)', '--text3': 'var(--menu-text3)',
+      } as React.CSSProperties}
     >
       {/* Drag handle */}
       <div

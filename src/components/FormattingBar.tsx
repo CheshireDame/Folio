@@ -31,9 +31,10 @@ export default function FormattingBar({ editor, visible }: FormattingBarProps) {
       onMouseDown={e => { e.preventDefault(); action() }}
       title={title || label}
       style={{
-        background: active ? 'rgba(196,168,130,0.2)' : 'none',
+        background: active ? 'rgba(128,128,128,0.2)' : 'none',
         border: 'none',
-        color: active ? 'var(--accent)' : 'var(--text2)',
+        color: 'var(--toolbar-text)',
+        opacity: active ? 1 : 0.85,
         cursor: 'pointer',
         padding: '3px 8px',
         borderRadius: 3,
@@ -41,10 +42,10 @@ export default function FormattingBar({ editor, visible }: FormattingBarProps) {
         fontFamily: '"JetBrains Mono", monospace',
         whiteSpace: 'nowrap' as const,
         flexShrink: 0,
-        transition: 'color 0.15s',
+        transition: 'opacity 0.15s',
       }}
-      onMouseOver={e => { if(!active) e.currentTarget.style.color = 'var(--text)' }}
-      onMouseOut={e => { if(!active) e.currentTarget.style.color = 'var(--text2)' }}
+      onMouseOver={e => { if(!active) e.currentTarget.style.opacity = '1' }}
+      onMouseOut={e => { if(!active) e.currentTarget.style.opacity = '0.85' }}
     >{labelStyle ? <span style={labelStyle}>{label}</span> : label}</button>
   )
 
@@ -63,7 +64,7 @@ export default function FormattingBar({ editor, visible }: FormattingBarProps) {
         onMouseDown={e => { e.preventDefault(); closeAll(); if (!open) toggle() }}
         style={{
           background: open ? 'var(--surface2)' : 'none',
-          border: 'none', color: 'var(--text2)', cursor: 'pointer',
+          border: 'none', color: 'var(--toolbar-text)', cursor: 'pointer',
           padding: '3px 8px', borderRadius: 3, fontSize: 11,
           fontFamily: '"JetBrains Mono", monospace',
           display: 'flex', alignItems: 'center', gap: 3,
@@ -145,9 +146,9 @@ export default function FormattingBar({ editor, visible }: FormattingBarProps) {
         <button
           onMouseDown={e => { e.preventDefault(); closeAll(); if (!showColors) setShowColors(true) }}
           title="Text color"
-          style={{ background: 'none', border: 'none', color: showColors ? 'var(--accent)' : 'var(--text2)', cursor: 'pointer', padding: '3px 8px', borderRadius: 3, fontSize: 11, fontFamily: '"JetBrains Mono", monospace', whiteSpace: 'nowrap' as const, flexShrink: 0 }}
-          onMouseOver={e => { if (!showColors) e.currentTarget.style.color = 'var(--text)' }}
-          onMouseOut={e => { if (!showColors) e.currentTarget.style.color = 'var(--text2)' }}
+          style={{ background: showColors ? 'rgba(128,128,128,0.2)' : 'none', border: 'none', color: 'var(--toolbar-text)', opacity: showColors ? 1 : 0.85, cursor: 'pointer', padding: '3px 8px', borderRadius: 3, fontSize: 11, fontFamily: '"JetBrains Mono", monospace', whiteSpace: 'nowrap' as const, flexShrink: 0 }}
+          onMouseOver={e => { if (!showColors) e.currentTarget.style.opacity = '1' }}
+          onMouseOut={e => { if (!showColors) e.currentTarget.style.opacity = '0.85' }}
         >🎨 Color</button>
         {showColors && (
           <div style={{ position: 'absolute', top: '100%', left: 0, marginTop: 4, background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 6, padding: 10, zIndex: 500, boxShadow: '0 8px 24px rgba(0,0,0,0.5)' }}>

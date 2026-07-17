@@ -47,7 +47,7 @@ function ImageCard({ img, selected, scrollTop, onMouseDown, onUpdate, onRemove }
           onMouseDown={e => e.stopPropagation()}
           style={{
             position: 'absolute', bottom: 'calc(100% + 6px)', left: '50%', transform: 'translateX(-50%)',
-            background: '#1a1814', border: '1px solid #3a3630', borderRadius: 6,
+            background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 6,
             padding: '3px 6px', display: 'flex', alignItems: 'center', gap: 2,
             boxShadow: '0 4px 16px rgba(0,0,0,0.7)', whiteSpace: 'nowrap', zIndex: 1000,
           }}
@@ -58,27 +58,27 @@ function ImageCard({ img, selected, scrollTop, onMouseDown, onUpdate, onRemove }
               onMouseDown={e => { e.preventDefault(); e.stopPropagation(); onUpdate({ width: s }) }}
               style={{
                 background: img.width === s ? 'rgba(196,168,130,0.25)' : 'none',
-                border: 'none', color: img.width === s ? '#c4a882' : '#e8e2d9',
+                border: 'none', color: img.width === s ? 'var(--accent)' : 'var(--text)',
                 cursor: 'pointer', padding: '2px 5px', borderRadius: 3,
                 fontSize: 10, fontFamily: '"JetBrains Mono", monospace',
               }}
             >{s}px</button>
           ))}
-          <div style={{ width: 1, height: 12, background: 'rgba(255,255,255,0.15)', margin: '0 2px' }} />
+          <div style={{ width: 1, height: 12, background: 'var(--border)', margin: '0 2px' }} />
           <button
             onMouseDown={e => { e.preventDefault(); e.stopPropagation(); togglePin() }}
             title={pinned ? 'Unpin — image will stay in viewport' : 'Pin — image scrolls with content'}
             style={{
               background: pinned ? 'rgba(196,168,130,0.2)' : 'none',
-              border: 'none', color: pinned ? '#c4a882' : '#e8e2d9',
+              border: 'none', color: pinned ? 'var(--accent)' : 'var(--text)',
               cursor: 'pointer', padding: '2px 5px', borderRadius: 3,
               fontSize: 10, fontFamily: '"JetBrains Mono", monospace',
             }}
           >{pinned ? '📌' : '📍'}</button>
-          <div style={{ width: 1, height: 12, background: 'rgba(255,255,255,0.15)', margin: '0 2px' }} />
+          <div style={{ width: 1, height: 12, background: 'var(--border)', margin: '0 2px' }} />
           <button
             onMouseDown={e => { e.preventDefault(); e.stopPropagation(); onRemove() }}
-            style={{ background: 'none', border: 'none', color: '#e8e2d9', cursor: 'pointer', padding: '2px 5px', borderRadius: 3, fontSize: 10, fontFamily: '"JetBrains Mono", monospace' }}
+            style={{ background: 'none', border: 'none', color: 'var(--text)', cursor: 'pointer', padding: '2px 5px', borderRadius: 3, fontSize: 10, fontFamily: '"JetBrains Mono", monospace' }}
           >✕</button>
         </div>
       )}

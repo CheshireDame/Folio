@@ -132,6 +132,10 @@ interface Draft {
   ideationNotes?: IdeationNote[]
   blocks?: Block[]
   stageFont?: string
+  stickyNotes?: StickyNote[]
+  notesSections?: NoteSection[]
+  comments?: Comment[]
+  workspaceImages?: WorkspaceImage[]
 }
 
 export interface StickyNote {
@@ -150,12 +154,15 @@ export interface CustomTheme {
   bg: string; surface: string; text: string; text2: string
   text3: string; border: string; toolbar: string; accent: string
   bgImage: string; bgBlur: number; bgDim: number
+  toolbarColor: string; toolbarTextColor: string
+  editorFontFamily: string
 }
 
 interface FolioData {
   drafts: Record<string, Draft>
   currentDraft: string
-  notes: string
+  // Legacy top-level fields from before notes/images were scoped per-draft.
+  // Only read once on load to migrate old data into the current draft.
   notesSections?: NoteSection[]
   comments?: Comment[]
   stickyNotes?: StickyNote[]
@@ -191,9 +198,14 @@ interface FolioData {
     keySoundsVolume?: number
     toolbarColor?: string
     toolbarTextColor?: string
+    editorFontFamily?: string
     paragraphSpacing?: number
     postureEnabled?: boolean
+    // Legacy: interval used to be whole minutes only. Read once on load to
+    // migrate into postureIntervalSec, which supports second-level precision.
     postureInterval?: number
+    postureIntervalSec?: number
+    postureSound?: boolean
   }
 }
 
@@ -294,12 +306,8 @@ async function getWsImagesPath(): Promise<string> {
   return join(folioDir, 'workspace-images.json')
 }
 
-export async function saveWorkspaceImages(images: WorkspaceImage[]): Promise<void> {
-  try {
-    await writeTextFile(await getWsImagesPath(), JSON.stringify(images))
-  } catch (e) { console.error('Failed to save workspace images:', e) }
-}
-
+// Legacy: workspace images used to live in their own file, shared across all
+// drafts. Only read once on load to migrate old data into the current draft.
 export async function loadWorkspaceImages(): Promise<WorkspaceImage[]> {
   try {
     const path = await getWsImagesPath()

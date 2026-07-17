@@ -28,6 +28,9 @@ interface ToolbarProps {
   currentStage: 1 | 2 | 3
   onStageChange: (s: 1 | 2 | 3) => void
   onOpenMindMap: () => void
+  postureEnabled: boolean
+  postureMenuOpen: boolean
+  onTogglePosture: () => void
 }
 
 export default function Toolbar({
@@ -38,6 +41,7 @@ export default function Toolbar({
   onToggleAudio, audioOpen, autoHideBars, onToggleAutoHideBars, imageMode, onToggleImageMode,
   showSpacing, onToggleSpacing, showGlyphs, onToggleGlyphs,
   currentStage, onStageChange, onOpenMindMap,
+  postureEnabled, postureMenuOpen, onTogglePosture,
 }: ToolbarProps) {
 
   const btn = (label: string, action: () => void, active = false, title?: string) => (
@@ -48,7 +52,8 @@ export default function Toolbar({
       style={{
         background: active ? 'rgba(128,128,128,0.15)' : 'none',
         border: 'none',
-        color: active ? 'var(--accent)' : 'var(--toolbar-text)',
+        color: 'var(--toolbar-text)',
+        opacity: active ? 1 : 0.85,
         cursor: 'pointer',
         padding: '5px 8px',
         borderRadius: 4,
@@ -57,11 +62,11 @@ export default function Toolbar({
         textTransform: 'uppercase' as const,
         letterSpacing: '0.07em',
         whiteSpace: 'nowrap' as const,
-        transition: 'color 0.2s',
+        transition: 'opacity 0.2s',
         flexShrink: 0,
       }}
-      onMouseOver={e => { if(!active) e.currentTarget.style.color = 'var(--text)' }}
-      onMouseOut={e => { if(!active) e.currentTarget.style.color = 'var(--toolbar-text)' }}
+      onMouseOver={e => { if(!active) e.currentTarget.style.opacity = '1' }}
+      onMouseOut={e => { if(!active) e.currentTarget.style.opacity = '0.85' }}
     >
       {label}
     </button>
@@ -86,7 +91,7 @@ export default function Toolbar({
       <span style={{
         fontFamily: '"Playfair Display", serif',
         fontSize: 15,
-        color: 'var(--accent)',
+        color: 'var(--toolbar-text)',
         fontStyle: 'italic',
         marginRight: 14,
         flexShrink: 0,
@@ -106,29 +111,30 @@ export default function Toolbar({
         <button
           onClick={onImage}
           title="Insert image"
-          style={{ background: 'none', border: 'none', color: 'var(--toolbar-text)', cursor: 'pointer', padding: '5px 8px', fontSize: 11, fontFamily: '"JetBrains Mono", monospace', textTransform: 'uppercase', letterSpacing: '0.07em', whiteSpace: 'nowrap' }}
-          onMouseOver={e => e.currentTarget.style.color = 'var(--text)'}
-          onMouseOut={e => e.currentTarget.style.color = 'var(--toolbar-text)'}
+          style={{ background: 'none', border: 'none', color: 'var(--toolbar-text)', opacity: 0.85, cursor: 'pointer', padding: '5px 8px', fontSize: 11, fontFamily: '"JetBrains Mono", monospace', textTransform: 'uppercase', letterSpacing: '0.07em', whiteSpace: 'nowrap' }}
+          onMouseOver={e => e.currentTarget.style.opacity = '1'}
+          onMouseOut={e => e.currentTarget.style.opacity = '0.85'}
         >Image</button>
         <div style={{ width: 1, height: 16, background: 'var(--border)' }} />
         <button
           onClick={onToggleImageMode}
           title={imageMode === 'text' ? 'Inline — image inserts into text. Click to switch to Workspace.' : 'Workspace — image floats freely. Click to switch to Inline.'}
-          style={{ background: 'none', border: 'none', color: 'var(--accent)', cursor: 'pointer', padding: '5px 7px', fontSize: 10, fontFamily: '"JetBrains Mono", monospace', textTransform: 'uppercase', letterSpacing: '0.07em', whiteSpace: 'nowrap' }}
+          style={{ background: 'none', border: 'none', color: 'var(--toolbar-text)', cursor: 'pointer', padding: '5px 7px', fontSize: 10, fontFamily: '"JetBrains Mono", monospace', textTransform: 'uppercase', letterSpacing: '0.07em', whiteSpace: 'nowrap' }}
           onMouseOver={e => e.currentTarget.style.opacity = '0.7'}
           onMouseOut={e => e.currentTarget.style.opacity = '1'}
         >{imageMode === 'text' ? 'Inline' : 'Workspace'}</button>
       </div>
       {sep()}
-      {btn('Note', onNewNote)}
-      {btn('Mind Map', onOpenMindMap, false, 'Open the brainstorming canvas — connect bubbles and images')}
-      {btn('Audio', onToggleAudio, audioOpen)}
-      {sep()}
       {btn('Panel', onTogglePanel)}
-      {btn('Focus', onToggleFocus, focusMode)}
-      {btn('Autohide', onToggleAutoHideBars, autoHideBars)}
-      {btn('Timer', onToggleTimer, timerOpen || timerRunning)}
+      {btn('Mind Map', onOpenMindMap, false, 'Open the brainstorming canvas — connect bubbles and images')}
+      {btn('Note', onNewNote)}
       {sep()}
+      {btn('Audio', onToggleAudio, audioOpen)}
+      {btn('Timer', onToggleTimer, timerOpen || timerRunning)}
+      {btn('Posture', onTogglePosture, postureMenuOpen || postureEnabled, 'Set up a periodic posture check reminder')}
+      {sep()}
+      {btn('Focus Mode', onToggleFocus, focusMode)}
+      {btn('Autohide', onToggleAutoHideBars, autoHideBars)}
       {sep()}
       <div style={{ display: 'flex', border: '1px solid var(--border)', borderRadius: 4, overflow: 'hidden', flexShrink: 0 }}>
         {([1, 2, 3] as const).map((s, i) => {
@@ -140,17 +146,18 @@ export default function Toolbar({
               onClick={() => onStageChange(s)}
               title={['Ideation — scatter your ideas', 'Organize — arrange into blocks', 'Write — clean editor mode'][i]}
               style={{
-                background: active ? 'rgba(196,168,130,0.18)' : 'none',
+                background: active ? 'rgba(128,128,128,0.18)' : 'none',
                 border: 'none',
                 borderLeft: i > 0 ? '1px solid var(--border)' : 'none',
-                color: active ? 'var(--accent)' : 'var(--toolbar-text)',
+                color: 'var(--toolbar-text)',
+                opacity: active ? 1 : 0.85,
                 cursor: 'pointer', padding: '5px 9px',
                 fontSize: 10, fontFamily: '"JetBrains Mono", monospace',
                 textTransform: 'uppercase', letterSpacing: '0.07em',
-                whiteSpace: 'nowrap', transition: 'color 0.15s, background 0.15s',
+                whiteSpace: 'nowrap', transition: 'opacity 0.15s, background 0.15s',
               }}
-              onMouseOver={e => { if (!active) e.currentTarget.style.color = 'var(--text)' }}
-              onMouseOut={e => { if (!active) e.currentTarget.style.color = 'var(--toolbar-text)' }}
+              onMouseOver={e => { if (!active) e.currentTarget.style.opacity = '1' }}
+              onMouseOut={e => { if (!active) e.currentTarget.style.opacity = '0.85' }}
             >{labels[i]}</button>
           )
         })}
@@ -163,7 +170,7 @@ export default function Toolbar({
         fontFamily: '"JetBrains Mono", monospace',
         fontSize: 10,
         color: 'var(--toolbar-text)',
-        opacity: 0.6,
+        opacity: 0.72,
         whiteSpace: 'nowrap',
       }}>
         {currentDraft}

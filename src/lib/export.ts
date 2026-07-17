@@ -2,18 +2,22 @@ import { save } from '@tauri-apps/plugin-dialog'
 import { writeTextFile } from '@tauri-apps/plugin-fs'
 import { htmlToRtf } from './rtf'
 
+// Parse into an inert document (no script execution, no subresource loads,
+// no event handlers firing) rather than a live element.
+export function parseHtmlInert(html: string): HTMLElement {
+  return new DOMParser().parseFromString(html, 'text/html').body
+}
+
 export function htmlToPlainText(html: string): string {
-  const tmp = document.createElement('div')
-  tmp.innerHTML = html
+  const tmp = parseHtmlInert(html)
   tmp.querySelectorAll('img').forEach(img => {
-    img.replaceWith(document.createTextNode('[Image: ' + (img.alt || 'image') + ']'))
+    img.replaceWith(tmp.ownerDocument.createTextNode('[Image: ' + (img.alt || 'image') + ']'))
   })
   return (tmp.innerText || tmp.textContent || '').trim()
 }
 
 export function htmlToMarkdown(html: string): string {
-  const tmp = document.createElement('div')
-  tmp.innerHTML = html
+  const tmp = parseHtmlInert(html)
   tmp.querySelectorAll('strong, b').forEach(el => {
     el.insertAdjacentText('beforebegin', '**')
     el.insertAdjacentText('afterend', '**')
@@ -26,10 +30,14 @@ export function htmlToMarkdown(html: string): string {
   tmp.querySelectorAll('h2').forEach(el => el.insertAdjacentText('beforebegin', '## '))
   tmp.querySelectorAll('h3').forEach(el => el.insertAdjacentText('beforebegin', '### '))
   tmp.querySelectorAll('img').forEach(img => {
-    img.replaceWith(document.createTextNode('\n\n![' + (img.alt || 'image') + '](' + img.src + ')\n\n'))
+    img.replaceWith(tmp.ownerDocument.createTextNode('\n\n![' + (img.alt || 'image') + '](' + img.src + ')\n\n'))
   })
   tmp.querySelectorAll('p').forEach(el => { el.insertAdjacentText('afterend', '\n') })
   return (tmp.innerText || tmp.textContent || '').replace(/\n{3,}/g, '\n\n').trim()
+}
+
+function escapeHtml(s: string): string {
+  return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;')
 }
 
 export function buildHtml(html: string, draftName: string): string {
@@ -37,7 +45,7 @@ export function buildHtml(html: string, draftName: string): string {
 <html lang="en">
 <head>
 <meta charset="UTF-8">
-<title>${draftName}</title>
+<title>${escapeHtml(draftName)}</title>
 <link href="https://fonts.googleapis.com/css2?family=Crimson+Pro:ital,wght@0,400;1,400&display=swap" rel="stylesheet">
 <style>
   body { background: #1a1814; color: #e8e2d9; font-family: 'Crimson Pro', Georgia, serif; font-size: 20px; line-height: 1.85; max-width: 680px; margin: 80px auto; padding: 0 40px; }

@@ -4,6 +4,7 @@ import type { SoundType } from '../lib/keyboardSounds'
 
 const ACCENT_PRESETS = ['#c4a882','#d4a0a0','#90b090','#90a8c0','#b0a0d0','#c8906a','#e8c060','#a0c4d0','#d0a0c0','#80c0a0']
 const BG_PRESETS = ['#1a1814','#f5f0e8','#1c2128','#1a1f1a','#1e1a26','#0d0d0d','#ffffff','#faf8f4','#1a1a2e','#0f1923']
+const FONTS = ['Crimson Pro','Playfair Display','JetBrains Mono','Georgia','Arial','Times New Roman']
 
 const LANGS = [
   { code: 'en',    name: 'English' },
@@ -100,10 +101,8 @@ interface SettingsModalProps {
   onToolbarColor: (s: string) => void
   toolbarTextColor: string
   onToolbarTextColor: (s: string) => void
-  postureEnabled: boolean
-  onPostureEnabled: (b: boolean) => void
-  postureInterval: number
-  onPostureInterval: (n: number) => void
+  editorFontFamily: string
+  onEditorFontFamily: (s: string) => void
 }
 
 export default function SettingsModal({
@@ -119,7 +118,7 @@ export default function SettingsModal({
   keySounds, onKeySounds, keySoundsVolume, onKeySoundsVolume,
   customKeySounds, onCustomKeySound, onPreviewSound,
   toolbarColor, onToolbarColor, toolbarTextColor, onToolbarTextColor,
-  postureEnabled, onPostureEnabled, postureInterval, onPostureInterval,
+  editorFontFamily, onEditorFontFamily,
 }: SettingsModalProps) {
   const [saveName, setSaveName]           = useState('')
   const [showSaveInput, setShowSaveInput] = useState(false)
@@ -210,7 +209,7 @@ export default function SettingsModal({
                 {t.bgImage
                   ? <img src={t.bgImage} style={{ position: 'absolute' as const, inset: 0, width: '100%', height: '100%', objectFit: 'cover' as const, opacity: 0.7 }} alt="" />
                   : <div style={{ position: 'absolute' as const, inset: 0, background: t.bg }} />}
-                <span style={{ position: 'relative' as const, zIndex: 1, fontSize: 10, color: t.text2, textShadow: t.bgImage ? '0 1px 3px rgba(0,0,0,0.8)' : 'none' }}>{t.name}</span>
+                <span style={{ position: 'relative' as const, zIndex: 1, fontSize: 10, color: t.text2, fontFamily: t.editorFontFamily ? `"${t.editorFontFamily}", Georgia, serif` : undefined, textShadow: t.bgImage ? '0 1px 3px rgba(0,0,0,0.8)' : 'none' }}>{t.name}</span>
                 <button className="del" onClick={e => { e.stopPropagation(); onDeleteCustomTheme(i) }}
                   style={{ position: 'absolute' as const, top: 3, right: 3, width: 14, height: 14, borderRadius: '50%', background: 'rgba(0,0,0,0.65)', border: 'none', color: '#fff', fontSize: 8, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', opacity: 0, transition: 'opacity 0.15s', padding: 0, zIndex: 2 }}>✕</button>
               </div>
@@ -273,6 +272,16 @@ export default function SettingsModal({
                   onMouseOut={e => e.currentTarget.style.color = 'var(--text3)'}
                 >Reset</button>
               )}
+            </div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+              <span style={{ fontSize: 12, color: 'var(--text2)', width: 120 }}>Body font</span>
+              <select
+                value={editorFontFamily}
+                onChange={e => onEditorFontFamily(e.target.value)}
+                style={{ flex: 1, background: 'var(--surface)', border: '1px solid var(--border)', color: 'var(--text)', padding: '5px 8px', borderRadius: 5, fontFamily: `"${editorFontFamily}", Georgia, serif`, fontSize: 13, outline: 'none' }}
+              >
+                {FONTS.map(f => <option key={f} value={f} style={{ fontFamily: `"${f}", Georgia, serif` }}>{f}</option>)}
+              </select>
             </div>
           </div>
         </div>
@@ -431,29 +440,6 @@ export default function SettingsModal({
             />
           </div>
         </div>
-
-        {label('Reminders')}
-        <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 10 }}>
-          <span style={{ fontSize: 12, color: 'var(--text2)', width: 120 }}>Posture check</span>
-          <button
-            onClick={() => onPostureEnabled(!postureEnabled)}
-            style={{ padding: '4px 12px', background: postureEnabled ? 'var(--accent)' : 'transparent', border: '1px solid var(--border)', borderRadius: 5, color: postureEnabled ? 'var(--bg)' : 'var(--text3)', cursor: 'pointer', fontFamily: '"JetBrains Mono", monospace', fontSize: 10, textTransform: 'uppercase', letterSpacing: '0.07em', transition: 'background 0.2s, color 0.2s' }}
-          >{postureEnabled ? 'On' : 'Off'}</button>
-        </div>
-        {postureEnabled && (
-          <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 16, paddingLeft: 0 }}>
-            <span style={{ fontSize: 12, color: 'var(--text2)', width: 120 }}>Every</span>
-            <div style={{ display: 'flex', gap: 5, flexWrap: 'wrap' as const }}>
-              {[10, 15, 20, 30, 45, 60, 90].map(m => (
-                <button
-                  key={m}
-                  onClick={() => onPostureInterval(m)}
-                  style={{ padding: '4px 10px', background: postureInterval === m ? 'rgba(196,168,130,0.2)' : 'transparent', border: '1px solid var(--border)', borderRadius: 5, color: postureInterval === m ? 'var(--accent)' : 'var(--text3)', cursor: 'pointer', fontFamily: '"JetBrains Mono", monospace', fontSize: 10 }}
-                >{m}m</button>
-              ))}
-            </div>
-          </div>
-        )}
 
         <button onClick={onClose} style={{ width: '100%', padding: 10, background: 'transparent', border: '1px solid var(--border)', color: 'var(--text2)', borderRadius: 6, cursor: 'pointer', fontFamily: '"JetBrains Mono", monospace', fontSize: 11, letterSpacing: '0.08em', textTransform: 'uppercase' as const }}>Close</button>
       </div>

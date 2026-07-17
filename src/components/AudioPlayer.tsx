@@ -64,7 +64,7 @@ export default function AudioPlayer({ open, tracks, onAddTrack, onRemoveTrack }:
     <>
       <audio ref={audioRef} loop />
       {open && (
-        <div style={{ position: 'fixed', bottom: 52, left: 16, zIndex: 300, width: 264, background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 10, padding: '12px 14px', boxShadow: '0 8px 32px rgba(0,0,0,0.55)', userSelect: 'none' }}>
+        <div style={{ position: 'fixed', bottom: 52, left: 16, zIndex: 300, width: 264, background: 'var(--menu-bg)', border: '1px solid var(--border)', borderRadius: 10, padding: '12px 14px', boxShadow: '0 8px 32px rgba(0,0,0,0.55)', userSelect: 'none', '--text': 'var(--menu-text)', '--text2': 'var(--menu-text2)', '--text3': 'var(--menu-text3)' } as React.CSSProperties}>
 
           <div style={{ fontFamily: '"JetBrains Mono", monospace', fontSize: 9, textTransform: 'uppercase', letterSpacing: '0.1em', color: 'var(--text3)', marginBottom: 10 }}>Audio</div>
 

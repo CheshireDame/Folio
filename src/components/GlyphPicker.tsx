@@ -69,7 +69,7 @@ export default function GlyphPicker({ onInsert, topOffset, onClose }: GlyphPicke
         top: topOffset,
         left: '50%',
         transform: 'translateX(-50%)',
-        background: 'var(--surface)',
+        background: 'var(--menu-bg)',
         border: '1px solid var(--border)',
         borderRadius: 10,
         padding: '16px 18px',
@@ -78,7 +78,8 @@ export default function GlyphPicker({ onInsert, topOffset, onClose }: GlyphPicke
         overflowY: 'auto',
         zIndex: 300,
         boxShadow: '0 10px 36px rgba(0,0,0,0.55)',
-      }}>
+        '--text': 'var(--menu-text)', '--text2': 'var(--menu-text2)', '--text3': 'var(--menu-text3)',
+      } as React.CSSProperties}>
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 16 }}>
           <div style={{ fontFamily: '"Playfair Display", serif', fontSize: 15, color: 'var(--accent)', fontStyle: 'italic' }}>
             Special Characters

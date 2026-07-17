@@ -91,14 +91,15 @@ export default function SpacingPanel({
         position: 'fixed',
         top: topOffset,
         left: 8,
-        background: 'var(--surface)',
+        background: 'var(--menu-bg)',
         border: '1px solid var(--border)',
         borderRadius: 9,
         padding: '14px 16px',
         width: 290,
         zIndex: 300,
         boxShadow: '0 8px 28px rgba(0,0,0,0.5)',
-      }}>
+        '--text': 'var(--menu-text)', '--text2': 'var(--menu-text2)', '--text3': 'var(--menu-text3)',
+      } as React.CSSProperties}>
         <div style={{ fontFamily: '"Playfair Display", serif', fontSize: 13, color: 'var(--accent)', fontStyle: 'italic', marginBottom: 14 }}>
           Spacing
         </div>
