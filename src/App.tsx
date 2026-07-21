@@ -183,6 +183,7 @@ const [showSettings, setShowSettings]     = useState(false)
   const timerRef      = useRef<number | null>(null)
   const imageInputRef = useRef<HTMLInputElement>(null)
   const saveTimeout   = useRef<number | null>(null)
+  const mindMapSaveTimeout = useRef<number | null>(null)
   const editorWrapRef = useRef<HTMLDivElement>(null)
   const canvasRef     = useRef<HTMLDivElement>(null)
   const workspaceRef  = useRef<HTMLDivElement>(null)
@@ -274,10 +275,16 @@ const [showSettings, setShowSettings]     = useState(false)
     loadMindMap().then(setMindMap)
   }, [])
 
-  // Mind-map persistence
+  // Mind-map persistence, debounced — dragging a bend point/bubble fires an
+  // onChange (and this effect) on every mousemove tick. Saving on every single
+  // one queues a real Tauri IPC file write per tick; a smooth drag can queue
+  // dozens back-to-back, backing up the webview and making it feel "stuck" for
+  // a moment after you let go while that backlog drains (a plain browser tab
+  // never surfaces this since there's no real file I/O to back up).
   useEffect(() => {
     if (!loaded) return
-    saveMindMap(mindMap)
+    if (mindMapSaveTimeout.current) clearTimeout(mindMapSaveTimeout.current)
+    mindMapSaveTimeout.current = window.setTimeout(() => { saveMindMap(mindMap) }, 500)
   }, [mindMap, loaded])
 
   // Load draft content into editor once both editor and data are ready

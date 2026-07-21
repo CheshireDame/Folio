@@ -52,6 +52,19 @@ export default function MindMap({ data, onChange, onClose, ideationNotes, notesS
   // Multi-select: bubble ids currently selected, and the live rubber-band box (world coords) while dragging one out.
   const [selected, setSelected] = useState<Set<string>>(new Set())
   const [boxSel, setBoxSel] = useState<BoxSel | null>(null)
+  // Bumped only to force a re-render when the mousedown/blur safety nets below
+  // clear a stale dragRef — dragRef itself is a plain ref, so mutating it alone
+  // wouldn't repaint the cursor/pointer-events that read it.
+  const [, forceUpdate] = useState(0)
+  // Bumped once a drag that can reshape an edge (moving a bubble/image, or
+  // dragging a bend point) finishes. Folded into every edge's `key` below so
+  // React throws away and recreates its DOM node rather than just updating its
+  // `d` attribute in place — the WebView2 build this app ships on appears to
+  // cache an SVG path's hit-testable stroke region and never recomputes it
+  // after the shape changes (only an unrelated re-layout, like zooming, forces
+  // that recheck), so an in-place update leaves the line's clickable area stuck
+  // at its pre-drag shape. A fresh element has no stale region to be stuck on.
+  const [geomVersion, setGeomVersion] = useState(0)
 
   // Refs mirror state so document-level listeners avoid stale closures.
   const dataRef = useRef(data);     useEffect(() => { dataRef.current = data }, [data])
@@ -60,6 +73,38 @@ export default function MindMap({ data, onChange, onClose, ideationNotes, notesS
   const panRef = useRef(pan);       useEffect(() => { panRef.current = pan }, [pan])
   const heightsRef = useRef(heights); useEffect(() => { heightsRef.current = heights }, [heights])
   const dragRef = useRef<Drag | null>(null)
+
+  // Forcing a fresh DOM node per edge (geomVersion, above) wasn't quite enough —
+  // it fixes a line right after you reshape it, but panning the canvas afterward
+  // makes it unclickable again until you zoom. That points at *scale* specifically
+  // being what invalidates WebView2's cached hit-region (matching the by-hand
+  // zoom workaround); a pure translate (pan) doesn't retrigger the same recheck.
+  // So mimic zooming directly: nudge scale by a fraction of a percent and back on
+  // the next frame. The revert is deferred to a real animation frame rather than
+  // done synchronously, so the nudged value actually commits and paints —
+  // otherwise React would just no-op the round trip and the browser would never
+  // see a scale change to react to.
+  // Tracks the scale from before an in-flight nudge, so the revert restores the
+  // exact original value (rather than dividing back, which would drift the
+  // stored scale a tiny bit further off on every single nudge — and this can
+  // fire on every keystroke). Also lets rapid successive calls (e.g. fast
+  // typing) collapse into one pending revert instead of stacking.
+  const scaleNudgeBaseRef = useRef<number | null>(null)
+  const scaleNudgeFrameRef = useRef<number | null>(null)
+  const nudgeHitTest = useCallback(() => {
+    if (scaleNudgeBaseRef.current === null) scaleNudgeBaseRef.current = scaleRef.current
+    if (scaleNudgeFrameRef.current !== null) cancelAnimationFrame(scaleNudgeFrameRef.current)
+    setScale(scaleNudgeBaseRef.current * 1.0005)
+    scaleNudgeFrameRef.current = requestAnimationFrame(() => {
+      setScale(scaleNudgeBaseRef.current!)
+      scaleNudgeBaseRef.current = null
+      scaleNudgeFrameRef.current = null
+    })
+  }, [])
+  useEffect(() => {
+    nudgeHitTest()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [data.edges, data.nodes, data.images, heights])
 
   const patch = useCallback((p: Partial<MindMapData>) => {
     onChangeRef.current({ ...dataRef.current, ...p })
@@ -101,6 +146,20 @@ export default function MindMap({ data, onChange, onClose, ideationNotes, notesS
   // ─── Global mouse move / up: drives every drag mode ────────────────────────
   useEffect(() => {
     const onMove = (e: MouseEvent) => {
+      // Self-healing watchdog: if we think a drag is active but the mouse button
+      // is actually no longer down, the mouseup that should have cleared it was
+      // missed (seen in the Tauri webview — the exact trigger isn't reproducible
+      // in a plain browser, but this check is correct regardless of cause: e.buttons
+      // reflects the real, current button state on every mousemove tick, so a
+      // missed mouseup self-corrects within one frame instead of leaving the
+      // cursor/line permanently stuck).
+      if (dragRef.current && e.buttons === 0) {
+        dragRef.current = null
+        setConnectPos(null)
+        setBoxSel(null)
+        forceUpdate(x => x + 1)
+        return
+      }
       const d = dragRef.current
       if (!d) return
       const s = scaleRef.current
@@ -182,16 +241,49 @@ export default function MindMap({ data, onChange, onClose, ideationNotes, notesS
         }
         setBoxSel(null)
       }
+      // Any of these can leave an edge a different shape than it was at mousedown
+      // (moving an endpoint's bubble/image, dragging a bend point, or wiring up a
+      // brand-new edge) — see geomVersion above for why that needs a fresh DOM node.
+      if (d.mode === 'node' || d.mode === 'image' || d.mode === 'edgePoint' || d.mode === 'connect') {
+        setGeomVersion(v => v + 1)
+      }
+      // Panning doesn't change any edge's shape, but it does shift where on screen
+      // that shape's (WebView2-cached) hit-region sits — see nudgeHitTest above.
+      if (d.mode === 'pan') nudgeHitTest()
       dragRef.current = null
+    }
+
+    // Safety net: a stale drag ref can be left behind if a mouseup is ever missed
+    // (seen in the Tauri webview as a permanently "stuck" grabbing cursor and an
+    // edge that stops responding to clicks — e.g. after curving a line). A new
+    // mousedown can only happen once the previous button press has been released,
+    // so it's always correct to clear any leftover drag state before the new
+    // gesture's own handler runs. Capture phase guarantees this fires first.
+    const onDownCapture = () => {
+      if (dragRef.current) { dragRef.current = null; forceUpdate(x => x + 1) }
+    }
+    // Same idea for losing window focus mid-drag (e.g. alt-tab) — the mouseup
+    // that would normally clean up never reaches us in that case.
+    const onBlur = () => {
+      if (dragRef.current) {
+        dragRef.current = null
+        setConnectPos(null)
+        setBoxSel(null)
+        forceUpdate(x => x + 1)
+      }
     }
 
     document.addEventListener('mousemove', onMove)
     document.addEventListener('mouseup', onUp)
+    document.addEventListener('mousedown', onDownCapture, true)
+    window.addEventListener('blur', onBlur)
     return () => {
       document.removeEventListener('mousemove', onMove)
       document.removeEventListener('mouseup', onUp)
+      document.removeEventListener('mousedown', onDownCapture, true)
+      window.removeEventListener('blur', onBlur)
     }
-  }, [patch, toWorld])
+  }, [patch, toWorld, nudgeHitTest])
 
   // ─── Wheel zoom (native, non-passive) — keeps the cursor's point anchored ───
   useEffect(() => {
@@ -440,7 +532,14 @@ export default function MindMap({ data, onChange, onClose, ideationNotes, notesS
 
   const addEdgePoint = (edge: MindEdge, pts: Pt[], cr: CRSegment[], click: Pt) => {
     const k = nearestSegmentIndex(pts, cr, click)
-    const points = [...(edge.points ?? []).slice(0, k), click, ...(edge.points ?? []).slice(k)]
+    // Nudge the new point perpendicular to the segment so the bend is visible right away —
+    // dropping it exactly on the (already straight) line would produce zero visual change,
+    // making the double-click look like it did nothing.
+    const p0 = pts[k], p1 = pts[k + 1]
+    const dirX = p1.x - p0.x, dirY = p1.y - p0.y
+    const len = Math.hypot(dirX, dirY) || 1
+    const nudged = { x: click.x - dirY / len * 24, y: click.y + dirX / len * 24 }
+    const points = [...(edge.points ?? []).slice(0, k), nudged, ...(edge.points ?? []).slice(k)]
     patch({ edges: data.edges.map(ed => ed.id === edge.id ? { ...ed, points } : ed) })
   }
   const removeEdgePoint = (edgeId: string, index: number) =>
@@ -487,18 +586,30 @@ export default function MindMap({ data, onChange, onClose, ideationNotes, notesS
           ))}
 
           {/* Edges layer: above images, below bubbles */}
-          <svg style={{ position: 'absolute', left: 0, top: 0, width: 1, height: 1, overflow: 'visible', pointerEvents: 'none' }}>
+          {/* A near-zero SVG box relying purely on overflow:visible to paint (and hit-test)
+              content far outside it is an edge case that different engines can handle
+              inconsistently — give it a generously large real box instead so every edge's
+              hit-testing happens on content that's actually within the element's bounds. */}
+          <svg style={{ position: 'absolute', left: 0, top: 0, width: 20000, height: 20000, overflow: 'visible', pointerEvents: 'none' }}>
             {segs.map(({ edge, a, b, pts, cr, d, delPos, colorPos }) => {
               const sel = selectedEdge === edge.id
               return (
-                <g key={edge.id}>
+                <g key={`${edge.id}-${geomVersion}`}>
                   {/* wide invisible hit area — double-click adds a bend point at that spot */}
                   <path d={d} fill="none" stroke="transparent" strokeWidth={14}
+                    vectorEffect="non-scaling-stroke"
                     style={{ pointerEvents: dragRef.current ? 'none' : 'stroke', cursor: 'pointer' }}
                     onMouseDown={e => { e.stopPropagation(); setSelectedEdge(edge.id) }}
                     onDoubleClick={e => { e.stopPropagation(); addEdgePoint(edge, pts, cr, toWorld(e.clientX, e.clientY)) }} />
+                  {/* Selection halo — sits under the real line so picking a color stays visible
+                      immediately, instead of the old behaviour of overriding the stroke to the
+                      accent color (which hid the change until the edge was deselected). */}
+                  {sel && (
+                    <path d={d} fill="none" stroke="var(--accent)" strokeWidth={7} strokeOpacity={0.35}
+                      vectorEffect="non-scaling-stroke" pointerEvents="none" strokeLinecap="round" />
+                  )}
                   <path d={d} fill="none"
-                    stroke={sel ? 'var(--accent)' : (edge.color || 'var(--text3)')} strokeWidth={sel ? 3 : 2}
+                    stroke={edge.color || 'var(--text3)'} strokeWidth={sel ? 3 : 2}
                     vectorEffect="non-scaling-stroke" pointerEvents="none" strokeLinecap="round" />
                   {/* dot where a line meets an image, at the exact connection point */}
                   {edge.to.kind === 'image' && <circle cx={b.x} cy={b.y} r={4} fill="var(--accent)" vectorEffect="non-scaling-stroke" pointerEvents="none" />}
