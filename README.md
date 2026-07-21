@@ -111,4 +111,4 @@ Folio stores its data as JSON in the app data directory
 
 ## Version
 
-**2.0.0**
+**3.1.0**
