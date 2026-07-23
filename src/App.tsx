@@ -24,7 +24,10 @@ import FormattingBar from './components/FormattingBar'
 import SpacingPanel from './components/SpacingPanel'
 import GlyphPicker from './components/GlyphPicker'
 import { saveData, loadData, saveAudioTracks, loadAudioTracks, loadWorkspaceImages, saveCustomKeySounds, loadCustomKeySounds, saveDocumentToFile, openDocumentFromFile, CustomTheme, StickyNote, AudioTrack, NoteSection, Comment, WorkspaceImage, CustomKeySounds } from './lib/storage'
-import type { Draft as DraftType, Block } from './lib/storage'
+import type { Draft as DraftType, Block, ThemePalette } from './lib/storage'
+import { saveCustomFonts, loadCustomFonts, type CustomFont } from './lib/storage'
+import { BUILTIN_FONTS, DEFAULT_FONT } from './lib/fonts'
+import { exportTheme, importTheme, isSafeFontFamily, isSafeDataUrl } from './lib/themeShare'
 import { setCustomSound, previewSound, SoundType } from './lib/keyboardSounds'
 import { FontSize } from './lib/font-size'
 import StickyLayer from './components/StickyLayer'
@@ -179,6 +182,11 @@ const [showSettings, setShowSettings]     = useState(false)
   const [showPostureMenu, setShowPostureMenu] = useState(false)
   const [showMindMap, setShowMindMap]       = useState(false)
   const [mindMap, setMindMap]               = useState<MindMapData>(EMPTY_MIND_MAP)
+  const [paletteOverride, setPaletteOverride] = useState<Partial<ThemePalette> | null>(null)
+  const [customFonts, setCustomFonts]       = useState<CustomFont[]>([])
+  // Lifted out of AudioPlayer so a saved theme can restore what was playing.
+  const [musicTrackId, setMusicTrackId]     = useState<string | null>(null)
+  const [musicVolume, setMusicVolume]       = useState(60)
 
   const timerRef      = useRef<number | null>(null)
   const imageInputRef = useRef<HTMLInputElement>(null)
@@ -187,7 +195,10 @@ const [showSettings, setShowSettings]     = useState(false)
   const editorWrapRef = useRef<HTMLDivElement>(null)
   const canvasRef     = useRef<HTMLDivElement>(null)
   const workspaceRef  = useRef<HTMLDivElement>(null)
-  const theme = THEMES[themeIdx]
+  // A custom theme layers its saved colors over the built-in palette. Without
+  // this merge the text/surface/border colors stored on a CustomTheme could
+  // never take effect, and applying one appeared to only change the background.
+  const theme = paletteOverride ? { ...THEMES[themeIdx], ...paletteOverride } : THEMES[themeIdx]
 
   const editor = useEditor({
     extensions: [
@@ -267,12 +278,22 @@ const [showSettings, setShowSettings]     = useState(false)
         setPostureEnabled(data.settings.postureEnabled ?? false)
         setPostureIntervalSec(data.settings.postureIntervalSec ?? (data.settings.postureInterval ? data.settings.postureInterval * 60 : 30 * 60))
         setPostureSound(data.settings.postureSound ?? true)
+        setPaletteOverride(data.settings.paletteOverride ?? null)
+        setCanvasBg(data.settings.canvasBg ?? 'transparent')
+        setCanvasOpacity(data.settings.canvasOpacity ?? 100)
+        setCanvasBlur(data.settings.canvasBlur ?? 0)
+        setShadowColor(data.settings.shadowColor ?? '#000000')
+        setShadowOpacity(data.settings.shadowOpacity ?? 0)
+        setShadowRange(data.settings.shadowRange ?? 20)
+        setMusicTrackId(data.settings.musicTrackId ?? null)
+        setMusicVolume(data.settings.musicVolume ?? 60)
       }
       setLoaded(true)
     })
     loadAudioTracks().then(setAudioTracks)
     loadCustomKeySounds().then(setCustomKeySounds)
     loadMindMap().then(setMindMap)
+    loadCustomFonts().then(setCustomFonts)
   }, [])
 
   // Mind-map persistence, debounced — dragging a bend point/bubble fires an
@@ -311,10 +332,19 @@ const [showSettings, setShowSettings]     = useState(false)
     // Toolbar text: honor a manual override, otherwise pick whichever extreme actually
     // contrasts best against the toolbar color itself (a fixed muted gray reads fine on the
     // default near-black toolbar but goes illegible once the toolbar color is customized).
-    const toolbarTextAuto = contrastRatio(toolbarBase, darkText) >= contrastRatio(toolbarBase, lightText) ? darkText : lightText
+    // Prefer the theme's own text color so the toolbar shifts with the theme
+    // instead of snapping between the same near-black/near-white pair every
+    // time. Only when it fails AA (4.5:1) against the toolbar do we fall back
+    // to whichever extreme actually contrasts — legibility wins over palette.
+    const bestExtreme = contrastRatio(toolbarBase, darkText) >= contrastRatio(toolbarBase, lightText) ? darkText : lightText
+    const toolbarTextAuto = contrastRatio(toolbarBase, theme.text) >= 4.5 ? theme.text : bestExtreme
     r.setProperty('--toolbar-text', toolbarTextColor || toolbarTextAuto)
     r.setProperty('--accent',       accentColor)
     r.setProperty('--accent2',      darken(accentColor))
+    // Legible label colour for anything painted on top of the accent (filled
+    // buttons). Using --bg for this broke once a custom theme could set the
+    // background and the accent to nearby colours.
+    r.setProperty('--accent-text',  contrastRatio(accentColor, darkText) >= contrastRatio(accentColor, lightText) ? darkText : lightText)
     // Small popups (timer, audio, posture, panel…) sit near the toolbar — toolbar color adaptation.
     // Push the shade further from the toolbar (and re-check real WCAG contrast) until legible in
     // every hue, since a fixed small offset reads fine on neutrals but goes muddy on saturated colors.
@@ -335,6 +365,27 @@ const [showSettings, setShowSettings]     = useState(false)
     r.setProperty('--menu-text',  menuIsLight ? darkText : lightText)
     r.setProperty('--menu-text2', menuIsLight ? 'rgba(31,28,23,0.82)' : 'rgba(242,237,228,0.82)')
     r.setProperty('--menu-text3', menuIsLight ? 'rgba(31,28,23,0.65)' : 'rgba(242,237,228,0.65)')
+    // A filled button has to be distinguishable from the panel it sits on, not
+    // just have legible text. Push the accent away from --menu-bg until it
+    // clears 3:1 — WCAG's bar for non-text UI — because an accent close to the
+    // panel colour makes the button shape itself vanish. Falls back to the
+    // accent unchanged when it already contrasts.
+    let accentUi = accentColor
+    if (contrastRatio(accentUi, menuBg) < 3) {
+      // Move toward whichever extreme the panel is furthest from — comparing
+      // against white/black directly, since a raw luminance threshold picks the
+      // wrong direction for mid-tone panels and pushes the accent *into* them.
+      const goLighter = contrastRatio(menuBg, '#ffffff') > contrastRatio(menuBg, '#000000')
+      for (let a = 0.05; a <= 0.95; a += 0.05) {
+        accentUi = goLighter ? lighten(accentColor, a) : darken(accentColor, a)
+        if (contrastRatio(accentUi, menuBg) >= 3) break
+      }
+    }
+    r.setProperty('--accent-ui', accentUi)
+    r.setProperty('--accent-ui-text', contrastRatio(accentUi, darkText) >= contrastRatio(accentUi, lightText) ? darkText : lightText)
+    // Tinted fill for "active/running" states — pairs with an --accent-ui border
+    // so the button keeps a visible shape even when it is not solid.
+    r.setProperty('--accent-soft', hexToRgba(accentUi, 0.18))
     const effectiveBg = bgColor || theme.bg
     const lum = getLuminance(effectiveBg)
     r.setProperty('--placeholder-color', lum > 0.5 ? 'rgba(0,0,0,0.3)' : 'rgba(255,255,255,0.18)')
@@ -353,6 +404,26 @@ const [showSettings, setShowSettings]     = useState(false)
     const dimLayer = document.getElementById('folio-dim-layer')
     if (dimLayer) dimLayer.style.background = bgImage ? 'rgba(0,0,0,' + bgDim/100 + ')' : 'transparent'
   }, [themeIdx, accentColor, bgColor, bgImage, bgBlur, bgDim, toolbarColor, toolbarTextColor, theme])
+
+  // Register uploaded fonts with the document so `font-family: "<family>"`
+  // resolves anywhere in the app — editor, previews, exported-to-screen text.
+  // One <style> element rebuilt on change, rather than one per font.
+  useEffect(() => {
+    const ID = 'folio-custom-fonts'
+    let el = document.getElementById(ID) as HTMLStyleElement | null
+    if (!el) {
+      el = document.createElement('style')
+      el.id = ID
+      document.head.appendChild(el)
+    }
+    // Both values land inside a <style> element, so a family name or data URL
+    // containing CSS syntax could close the rule and inject its own. Filenames
+    // supply the family and imported themes supply both, so neither is trusted.
+    el.textContent = customFonts
+      .filter(f => isSafeFontFamily(f.family) && isSafeDataUrl(f.data))
+      .map(f => `@font-face{font-family:"${f.family}";src:url(${f.data});font-display:swap;}`)
+      .join('\n')
+  }, [customFonts])
 
   // Font/line-height — CSS vars apply immediately; setAttribute is a fallback for inline specificity
   useEffect(() => {
@@ -421,9 +492,12 @@ const [showSettings, setShowSettings]     = useState(false)
         ...drafts,
         [currentDraft]: { ...drafts[currentDraft], stickyNotes, notesSections, comments, workspaceImages },
       }
-      saveData({ drafts: draftsWithExtras, currentDraft, settings: { themeIdx, accentColor, bgColor, bgImage, bgBlur, bgDim, fontSize, editorWidth, lineHeight, wordGoal, showFormattingBar, canvasPadding, accentPresets, bgPresets, customThemes, showScrollbar, canvasAlign, spellCheckLang, imageMode, keySounds, keySoundsVolume, toolbarColor, toolbarTextColor, editorFontFamily, paragraphSpacing, postureEnabled, postureIntervalSec, postureSound } })
+      saveData({ drafts: draftsWithExtras, currentDraft, settings: { themeIdx, accentColor, bgColor, bgImage, bgBlur, bgDim, fontSize, editorWidth, lineHeight, wordGoal, showFormattingBar, canvasPadding, accentPresets, bgPresets, customThemes, showScrollbar, canvasAlign, spellCheckLang, imageMode, keySounds, keySoundsVolume, toolbarColor, toolbarTextColor, editorFontFamily, paragraphSpacing, postureEnabled, postureIntervalSec, postureSound, paletteOverride, musicTrackId, musicVolume, canvasBg, canvasOpacity, canvasBlur, shadowColor, shadowOpacity, shadowRange } })
     }, 1500)
-  }, [drafts, currentDraft, stickyNotes, notesSections, comments, workspaceImages, themeIdx, accentColor, bgColor, fontSize, editorWidth, lineHeight, wordGoal, loaded, toolbarColor, toolbarTextColor, editorFontFamily, paragraphSpacing, postureEnabled, postureIntervalSec, postureSound])
+  // Every value written above must be listed here, or changing it alone never
+  // marks settings dirty and the change is lost on restart (this is what was
+  // dropping background-image and custom-theme changes).
+  }, [drafts, currentDraft, stickyNotes, notesSections, comments, workspaceImages, themeIdx, accentColor, bgColor, fontSize, editorWidth, lineHeight, wordGoal, loaded, toolbarColor, toolbarTextColor, editorFontFamily, paragraphSpacing, postureEnabled, postureIntervalSec, postureSound, customThemes, paletteOverride, musicTrackId, musicVolume, canvasBg, canvasOpacity, canvasBlur, shadowColor, shadowOpacity, shadowRange, bgImage, bgBlur, bgDim, showFormattingBar, canvasPadding, accentPresets, bgPresets, showScrollbar, canvasAlign, spellCheckLang, imageMode, keySounds, keySoundsVolume])
 
   const toggleFocusMode = useCallback(() => {
     if (!document.fullscreenElement) {
@@ -881,7 +955,7 @@ WebkitBackdropFilter: canvasBlur > 0 ? 'blur(' + canvasBlur + 'px)' : undefined,
               >Cancel</button>
               <button
                 onClick={showConvertPrompt ? handleConvert : handleBuild}
-                style={{ padding: '8px 18px', background: 'var(--accent)', border: 'none', borderRadius: 6, color: 'var(--bg)', cursor: 'pointer', fontFamily: '"JetBrains Mono", monospace', fontSize: 11, textTransform: 'uppercase', letterSpacing: '0.07em' }}
+                style={{ padding: '8px 18px', background: 'var(--accent)', border: 'none', borderRadius: 6, color: 'var(--accent-text)', cursor: 'pointer', fontFamily: '"JetBrains Mono", monospace', fontSize: 11, textTransform: 'uppercase', letterSpacing: '0.07em' }}
               >{showConvertPrompt ? 'Convert' : 'Build'}</button>
             </div>
           </div>
@@ -896,11 +970,31 @@ WebkitBackdropFilter: canvasBlur > 0 ? 'blur(' + canvasBlur + 'px)' : undefined,
       <SettingsModal
         open={showSettings} themes={THEMES} currentTheme={themeIdx}
         fontSize={fontSize} editorWidth={editorWidth} lineHeight={lineHeight}
-        accentColor={accentColor} bgColor={bgColor || theme.bg}
-        onClose={() => setShowSettings(false)} onTheme={setThemeIdx}
+        accentColor={accentColor} themeAccent={theme.accent}
+        bgColor={bgColor || theme.bg} themeBg={theme.bg}
+        onClose={() => setShowSettings(false)}
+        // Picking a built-in theme drops every in-flight override layered on
+        // top, otherwise they mask the theme the user just chose. Built-ins
+        // define no canvas of their own, so its default is transparent — the
+        // canvas then shows the chosen theme's background through it.
+        onTheme={(i: number) => {
+          setThemeIdx(i); setPaletteOverride(null)
+          setAccentColor(THEMES[i].accent)
+          setBgColor(''); setToolbarColor(''); setToolbarTextColor('')
+          setCanvasBg('transparent'); setCanvasOpacity(100); setCanvasBlur(0)
+          setShadowColor('#000000'); setShadowOpacity(0); setShadowRange(20)
+          // Type resets too. Font *color* needs nothing here — it reads from
+          // --text, so clearing the palette override above already returns it
+          // to the chosen theme's text color.
+          setFontSize(20); setLineHeight(1.85); setParagraphSpacing(0.8)
+          setEditorFontFamily('Crimson Pro')
+        }}
         onFontSize={setFontSize} onEditorWidth={setEditorWidth}
         onLineHeight={setLineHeight} onAccentColor={setAccentColor}
-        onBgColor={setBgColor}
+        // Picking the theme's own background clears the override rather than
+        // storing an identical copy, so the background stays linked to the
+        // theme — which is what the rest of the theme logic keys off.
+        onBgColor={(c: string) => setBgColor(c === theme.bg ? '' : c)}
         showScrollbar={showScrollbar} onShowScrollbar={setShowScrollbar}
         canvasAlign={canvasAlign} onCanvasAlign={setCanvasAlign}
         spellCheckLang={spellCheckLang} onSpellCheckLang={setSpellCheckLang}
@@ -918,18 +1012,73 @@ WebkitBackdropFilter: canvasBlur > 0 ? 'blur(' + canvasBlur + 'px)' : undefined,
         customThemes={customThemes}
         onSaveCustomTheme={(name: string) => setCustomThemes(p => [...p, {
           name,
+          // Bake the *effective* colors in. A manual override (toolbarColor,
+          // bgColor) is in-flight customization; saving makes it this theme's
+          // own color, so the record matches what was actually on screen.
           bg: bgColor || theme.bg, surface: theme.surface, text: theme.text,
           text2: theme.text2, text3: theme.text3, border: theme.border,
-          toolbar: theme.toolbar, accent: accentColor,
+          toolbar: toolbarColor || theme.toolbar, accent: accentColor,
           bgImage, bgBlur, bgDim,
           toolbarColor, toolbarTextColor, editorFontFamily,
+          themeIdx,
+          canvasBg, canvasOpacity, canvasBlur,
+          shadowColor, shadowOpacity, shadowRange,
+          fontSize, lineHeight, paragraphSpacing, editorWidth,
+          keySounds, keySoundsVolume, customKeySounds,
+          musicTrackId, musicVolume,
         }])}
         onDeleteCustomTheme={(i: number) => setCustomThemes(p => p.filter((_, idx) => idx !== i))}
         onApplyCustomTheme={(t: CustomTheme) => {
-          setBgColor(t.bg); setAccentColor(t.accent)
+          // Restore the whole workspace, not just the background. Anything the
+          // theme does not specify resets to its default rather than carrying
+          // over, so no part of the previous look leaks into this one.
+          if (t.themeIdx !== undefined) setThemeIdx(t.themeIdx)
+          setPaletteOverride({
+            bg: t.bg, surface: t.surface, text: t.text, text2: t.text2,
+            text3: t.text3, border: t.border, accent: t.accent,
+            // Themes saved before colors were baked in kept the manual toolbar
+            // override in a separate field; prefer it so those still apply the
+            // color that was actually on screen when they were saved.
+            toolbar: t.toolbarColor || t.toolbar,
+          })
+          // Switching themes drops in-flight overrides — the theme's own baked
+          // colors take over, so nothing leaks in from the previous look.
+          setBgColor(''); setToolbarColor('')
+          setAccentColor(t.accent)
           setBgImage(t.bgImage); setBgBlur(t.bgBlur); setBgDim(t.bgDim)
-          setToolbarColor(t.toolbarColor ?? ''); setToolbarTextColor(t.toolbarTextColor ?? '')
-          setEditorFontFamily(t.editorFontFamily || 'Crimson Pro')
+          // An explicit toolbar text color stays a deliberate choice; when unset
+          // it recomputes for contrast against the theme's toolbar color.
+          setToolbarTextColor(t.toolbarTextColor ?? '')
+          // A theme stores the font's name; the file itself lives in fonts.json.
+          // If that font has since been deleted, fall back rather than leaving
+          // the picker showing a family that silently renders as Georgia.
+          const wantFont = t.editorFontFamily || DEFAULT_FONT
+          const fontAvailable = BUILTIN_FONTS.includes(wantFont) || customFonts.some(f => f.family === wantFont)
+          setEditorFontFamily(fontAvailable ? wantFont : DEFAULT_FONT)
+          // Canvas and shadow are part of the look a theme defines, so they
+          // reset rather than carry over — a theme saved without them must not
+          // inherit the previous theme's canvas color.
+          setCanvasBg(t.canvasBg ?? 'transparent')
+          setCanvasOpacity(t.canvasOpacity ?? 100)
+          setCanvasBlur(t.canvasBlur ?? 0)
+          setShadowColor(t.shadowColor ?? '#000000')
+          setShadowOpacity(t.shadowOpacity ?? 0)
+          setShadowRange(t.shadowRange ?? 20)
+          // Type is part of the theme too, so it resets rather than carries
+          // over — same reasoning as canvas above.
+          setFontSize(t.fontSize ?? 20)
+          setLineHeight(t.lineHeight ?? 1.85)
+          setParagraphSpacing(t.paragraphSpacing ?? 0.8)
+          setEditorWidth(t.editorWidth ?? 680)
+          if (t.keySounds !== undefined) setKeySounds(t.keySounds)
+          if (t.keySoundsVolume !== undefined) setKeySoundsVolume(t.keySoundsVolume)
+          if (t.customKeySounds) setCustomKeySounds(t.customKeySounds)
+          if (t.musicVolume !== undefined) setMusicVolume(t.musicVolume)
+          // Only restore music the library still has — a referenced track may
+          // have been deleted since the theme was saved.
+          if (t.musicTrackId !== undefined) {
+            setMusicTrackId(audioTracks.some(a => a.id === t.musicTrackId) ? t.musicTrackId : null)
+          }
         }}
         keySounds={keySounds} onKeySounds={setKeySounds}
         keySoundsVolume={keySoundsVolume} onKeySoundsVolume={setKeySoundsVolume}
@@ -939,6 +1088,70 @@ WebkitBackdropFilter: canvasBlur > 0 ? 'blur(' + canvasBlur + 'px)' : undefined,
         toolbarColor={toolbarColor} onToolbarColor={setToolbarColor}
         toolbarTextColor={toolbarTextColor} onToolbarTextColor={setToolbarTextColor}
         editorFontFamily={editorFontFamily} onEditorFontFamily={setEditorFontFamily}
+        onExportTheme={(t: CustomTheme) => {
+          // Inline whatever the theme only references, so the file stands alone
+          // on a machine that has neither the font nor the track.
+          const font = customFonts.find(f => f.family === t.editorFontFamily) ?? null
+          const music = audioTracks.find(a => a.id === t.musicTrackId) ?? null
+          exportTheme(t, font, music)
+        }}
+        onImportTheme={async () => {
+          const res = await importTheme()
+          if (!res.ok) return
+          const { theme, font, music } = res.bundle
+          if (font) {
+            setCustomFonts(fs => {
+              // Keep an existing font of the same name — the local file is the
+              // one already referenced by other themes.
+              if (fs.some(f => f.family === font.family)) return fs
+              const next = [...fs, font]
+              saveCustomFonts(next)
+              return next
+            })
+          }
+          if (music) {
+            setAudioTracks(ts => {
+              if (ts.some(a => a.id === music.id)) return ts
+              const next = [...ts, music]
+              saveAudioTracks(next)
+              return next
+            })
+          }
+          // Name-collide rather than overwrite: an import should never silently
+          // replace a theme the user already tuned.
+          setCustomThemes(p => {
+            const taken = new Set(p.map(t => t.name))
+            let name = theme.name
+            for (let i = 2; taken.has(name); i++) name = `${theme.name} (${i})`
+            return [...p, { ...theme, name }]
+          })
+        }}
+        customFonts={customFonts}
+        onAddCustomFont={(rawFamily: string, data: string) => {
+          // Filenames become CSS family names, so strip anything that isn't
+          // valid in one rather than letting the @font-face filter drop the
+          // font later and leave the user wondering why nothing happened.
+          const family = rawFamily.replace(/[^\w .'-]/g, ' ').replace(/\s+/g, ' ').trim().slice(0, 64)
+          if (!family || !isSafeDataUrl(data)) return
+          setCustomFonts(fs => {
+            // Re-uploading the same family replaces it rather than shadowing it
+            // with a duplicate @font-face rule.
+            const next = [...fs.filter(f => f.family !== family), { id: Date.now().toString(), family, data }]
+            saveCustomFonts(next)
+            return next
+          })
+          setEditorFontFamily(family)
+        }}
+        onDeleteCustomFont={(id: string) => {
+          setCustomFonts(fs => {
+            const gone = fs.find(f => f.id === id)
+            const next = fs.filter(f => f.id !== id)
+            saveCustomFonts(next)
+            // Don't leave the editor pointing at a font that no longer loads.
+            if (gone && gone.family === editorFontFamily) setEditorFontFamily(DEFAULT_FONT)
+            return next
+          })
+        }}
       />
       <ExportModal
         open={showExport}
@@ -950,6 +1163,8 @@ WebkitBackdropFilter: canvasBlur > 0 ? 'blur(' + canvasBlur + 'px)' : undefined,
       <AudioPlayer
         open={showAudio}
         tracks={audioTracks}
+        currentId={musicTrackId} onCurrentId={setMusicTrackId}
+        volume={musicVolume} onVolume={setMusicVolume}
         onAddTrack={t => setAudioTracks(ts => [...ts, t])}
         onRemoveTrack={id => setAudioTracks(ts => {
           const updated = ts.filter(t => t.id !== id)

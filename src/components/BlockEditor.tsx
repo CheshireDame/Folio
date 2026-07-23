@@ -191,7 +191,7 @@ export default function BlockEditor({ blocks, stageFont, onChange, onFontChange,
 
           <button
             onClick={onBuildDocument}
-            style={{ background: 'var(--accent)', border: 'none', color: 'var(--bg)', borderRadius: 5, cursor: 'pointer', padding: '6px 16px', fontFamily: '"JetBrains Mono", monospace', fontSize: 11, textTransform: 'uppercase', letterSpacing: '0.07em' }}
+            style={{ background: 'var(--accent)', border: 'none', color: 'var(--accent-text)', borderRadius: 5, cursor: 'pointer', padding: '6px 16px', fontFamily: '"JetBrains Mono", monospace', fontSize: 11, textTransform: 'uppercase', letterSpacing: '0.07em' }}
           >Build document →</button>
         </div>
       </div>

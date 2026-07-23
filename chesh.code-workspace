@@ -1,0 +1,66 @@
+{
+  "folders": [],
+  "settings": {
+    "workbench.colorTheme": "Forest Ash Yoru Paper",
+    "workbench.iconTheme": "vscode-stardew-icon-theme",
+    "material-icon-theme.folders.color": "#FF7FB8",
+
+    "workbench.colorCustomizations": {
+      "editor.background": "#0A0A0F",
+      "editor.foreground": "#F5EAF0",
+      "editorLineNumber.foreground": "#5A4A56",
+      "editorLineNumber.activeForeground": "#FF7FB8",
+      "editorCursor.foreground": "#FF7FB8",
+
+      "activityBar.background": "#0A0A0F",
+      "activityBar.foreground": "#FF7FB8",
+      "activityBar.inactiveForeground": "#8A6E82",
+      "activityBar.activeBorder": "#E85D8A",
+      "activityBarBadge.background": "#E85D8A",
+      "activityBarBadge.foreground": "#0A0A0F",
+
+      "sideBar.background": "#0D0B12",
+      "sideBar.foreground": "#F0D6E8",
+      "sideBarSectionHeader.background": "#12101A",
+      "sideBarSectionHeader.foreground": "#FF9EC4",
+
+      "terminal.background": "#0A0A0F",
+      "terminal.foreground": "#F5EAF0",
+      "terminalCursor.foreground": "#FF7FB8",
+      "terminalCursor.background": "#0A0A0F",
+      "terminal.selectionBackground": "#C77DFF44",
+      "terminal.ansiBlack": "#1A141C",
+      "terminal.ansiRed": "#E85D8A",
+      "terminal.ansiGreen": "#63D68F",
+      "terminal.ansiYellow": "#E8C07D",
+      "terminal.ansiBlue": "#8A7FFF",
+      "terminal.ansiMagenta": "#C77DFF",
+      "terminal.ansiCyan": "#7FD6C0",
+      "terminal.ansiWhite": "#F0D6E8",
+      "terminal.ansiBrightBlack": "#5A4A56",
+      "terminal.ansiBrightRed": "#FF7FA0",
+      "terminal.ansiBrightGreen": "#7FE6A5",
+      "terminal.ansiBrightYellow": "#F0D090",
+      "terminal.ansiBrightBlue": "#A79BFF",
+      "terminal.ansiBrightMagenta": "#D9A5FF",
+      "terminal.ansiBrightCyan": "#9FE6D4",
+      "terminal.ansiBrightWhite": "#FFFFFF"
+    },
+
+    "editor.tokenColorCustomizations": {
+      "comments": "#B57A8C",
+      "strings": "#6FCF97",
+      "keywords": "#E85D8A",
+      "numbers": "#E8C07D",
+      "functions": "#FF7FB8",
+      "types": "#8AB0FF",
+      "variables": "#F3C9DD"
+    },
+
+    "terminal.integrated.fontFamily": "'Comic Mono', 'Comic Sans MS', 'Cascadia Code', monospace",
+    "terminal.integrated.fontSize": 14,
+
+    "markdown.preview.fontFamily": "'MedievalSharp', 'Comic Mono', sans-serif",
+    "markdown.preview.fontSize": 15
+  }
+}

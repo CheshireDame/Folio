@@ -88,7 +88,7 @@ export default function PosturePopup({
         {row('Reminders', (
           <button
             onClick={onToggleEnabled}
-            style={{ padding: '5px 14px', background: enabled ? 'var(--accent)' : 'transparent', border: '1px solid var(--border)', borderRadius: 6, color: enabled ? 'var(--bg)' : 'var(--text3)', cursor: 'pointer', fontFamily: '"JetBrains Mono", monospace', fontSize: 10, textTransform: 'uppercase', letterSpacing: '0.07em', transition: 'background 0.2s, color 0.2s' }}
+            style={{ padding: '5px 14px', background: enabled ? 'var(--accent-ui)' : 'transparent', border: '1px solid var(--border)', borderRadius: 6, color: enabled ? 'var(--accent-ui-text)' : 'var(--text3)', cursor: 'pointer', fontFamily: '"JetBrains Mono", monospace', fontSize: 10, textTransform: 'uppercase', letterSpacing: '0.07em', transition: 'background 0.2s, color 0.2s' }}
           >{enabled ? 'On' : 'Off'}</button>
         ))}
 
@@ -98,7 +98,7 @@ export default function PosturePopup({
               <button
                 key={m}
                 onClick={() => onIntervalSecChange(m * 60)}
-                style={{ padding: '4px 9px', background: intervalSec === m * 60 ? 'rgba(196,168,130,0.2)' : 'transparent', border: '1px solid var(--border)', borderRadius: 5, color: intervalSec === m * 60 ? 'var(--accent)' : 'var(--text3)', cursor: 'pointer', fontFamily: '"JetBrains Mono", monospace', fontSize: 10 }}
+                style={{ padding: '4px 9px', background: intervalSec === m * 60 ? 'var(--accent-soft)' : 'transparent', border: '1px solid var(--border)', borderRadius: 5, color: intervalSec === m * 60 ? 'var(--accent-ui)' : 'var(--text3)', cursor: 'pointer', fontFamily: '"JetBrains Mono", monospace', fontSize: 10 }}
               >{m}m</button>
             ))}
           </div>
@@ -125,7 +125,7 @@ export default function PosturePopup({
           <div style={{ display: 'flex', alignItems: 'center', gap: 8, opacity: enabled ? 1 : 0.4, pointerEvents: enabled ? 'auto' : 'none' }}>
             <button
               onClick={onToggleSound}
-              style={{ padding: '5px 14px', background: sound ? 'var(--accent)' : 'transparent', border: '1px solid var(--border)', borderRadius: 6, color: sound ? 'var(--bg)' : 'var(--text3)', cursor: 'pointer', fontFamily: '"JetBrains Mono", monospace', fontSize: 10, textTransform: 'uppercase', letterSpacing: '0.07em', transition: 'background 0.2s, color 0.2s' }}
+              style={{ padding: '5px 14px', background: sound ? 'var(--accent-ui)' : 'transparent', border: '1px solid var(--border)', borderRadius: 6, color: sound ? 'var(--accent-ui-text)' : 'var(--text3)', cursor: 'pointer', fontFamily: '"JetBrains Mono", monospace', fontSize: 10, textTransform: 'uppercase', letterSpacing: '0.07em', transition: 'background 0.2s, color 0.2s' }}
             >{sound ? 'On' : 'Off'}</button>
             <button
               onClick={() => playChime(0.5)}

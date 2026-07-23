@@ -31,7 +31,9 @@ export default function PostureToast({ onDismiss }: Props) {
       style={{
         position: 'fixed', bottom: 52, left: '50%', transform: `translateX(-50%) translateY(${visible ? 0 : 16}px)`,
         opacity: visible ? 1 : 0, transition: 'opacity 0.35s ease, transform 0.35s ease',
-        zIndex: 500, background: 'var(--surface)', border: '1px solid var(--border)',
+        // --menu-bg over --surface: it is the palette App pushes to AAA contrast,
+        // so the toast stays readable on any custom theme.
+        zIndex: 500, background: 'var(--menu-bg)', border: '1px solid var(--border)',
         borderRadius: 10, padding: '12px 18px',
         boxShadow: '0 8px 32px rgba(0,0,0,0.55)',
         display: 'flex', alignItems: 'center', gap: 14,
@@ -41,10 +43,10 @@ export default function PostureToast({ onDismiss }: Props) {
       }}
     >
       <span style={{ fontSize: 18, flexShrink: 0 }}>🪑</span>
-      <span style={{ fontSize: 12, color: 'var(--text2)', lineHeight: 1.5, flex: 1 }}>{message}</span>
+      <span style={{ fontSize: 12, color: 'var(--menu-text2)', lineHeight: 1.5, flex: 1 }}>{message}</span>
       <button
         onClick={dismiss}
-        style={{ background: 'none', border: 'none', color: 'var(--text3)', cursor: 'pointer', fontSize: 13, padding: '2px 4px', flexShrink: 0, lineHeight: 1 }}
+        style={{ background: 'none', border: 'none', color: 'var(--menu-text3)', cursor: 'pointer', fontSize: 13, padding: '2px 4px', flexShrink: 0, lineHeight: 1 }}
       >✕</button>
     </div>
   )

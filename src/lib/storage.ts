@@ -149,6 +149,12 @@ export interface StickyNote {
   minimized?: boolean
 }
 
+// The color slots a theme controls. Mirrors an entry of THEMES in App.tsx.
+export interface ThemePalette {
+  bg: string; surface: string; text: string; text2: string
+  text3: string; border: string; toolbar: string; accent: string
+}
+
 export interface CustomTheme {
   name: string
   bg: string; surface: string; text: string; text2: string
@@ -156,6 +162,20 @@ export interface CustomTheme {
   bgImage: string; bgBlur: number; bgDim: number
   toolbarColor: string; toolbarTextColor: string
   editorFontFamily: string
+  // A saved theme is a full snapshot of the workspace, not just the background.
+  // Everything below is optional so themes saved before this still load — the
+  // apply handler falls back to the current value when a field is missing.
+  themeIdx?: number
+  canvasBg?: string; canvasOpacity?: number; canvasBlur?: number
+  shadowColor?: string; shadowOpacity?: number; shadowRange?: number
+  fontSize?: number; lineHeight?: number
+  paragraphSpacing?: number; editorWidth?: number
+  keySounds?: boolean; keySoundsVolume?: number
+  customKeySounds?: CustomKeySounds
+  // Music is referenced by id, not embedded: AudioTrack.data is a base64 data
+  // URL, and inlining songs here would bloat data.json on every autosave.
+  musicTrackId?: string | null
+  musicVolume?: number
 }
 
 interface FolioData {
@@ -206,6 +226,12 @@ interface FolioData {
     postureInterval?: number
     postureIntervalSec?: number
     postureSound?: boolean
+    // Palette colors from an applied custom theme. Layered over THEMES[themeIdx]
+    // so a custom theme can change text/surface/border colors, not just the
+    // background. Cleared when a built-in theme is picked.
+    paletteOverride?: Partial<ThemePalette> | null
+    musicTrackId?: string | null
+    musicVolume?: number
   }
 }
 
@@ -416,6 +442,37 @@ export async function loadAudioTracks(): Promise<AudioTrack[]> {
     console.error('Failed to load audio:', e)
     return []
   }
+}
+
+// User-uploaded fonts. Kept in their own file rather than in settings: a single
+// font file runs to hundreds of KB, and data.json is rewritten on every autosave.
+export interface CustomFont {
+  id: string
+  // Family name used in CSS and stored in editorFontFamily / saved themes.
+  family: string
+  // base64 data URL of the font file
+  data: string
+}
+
+async function getFontsPath(): Promise<string> {
+  const dir = await appDataDir()
+  const folioDir = await join(dir, 'Folio')
+  if (!(await exists(folioDir))) await mkdir(folioDir, { recursive: true })
+  return join(folioDir, 'fonts.json')
+}
+
+export async function saveCustomFonts(fonts: CustomFont[]): Promise<void> {
+  try {
+    await writeTextFile(await getFontsPath(), JSON.stringify(fonts))
+  } catch (e) { console.error('Failed to save fonts:', e) }
+}
+
+export async function loadCustomFonts(): Promise<CustomFont[]> {
+  try {
+    const path = await getFontsPath()
+    if (!(await exists(path))) return []
+    return JSON.parse(await readTextFile(path))
+  } catch (e) { console.error('Failed to load fonts:', e); return [] }
 }
 
 export type { FolioData, Draft }

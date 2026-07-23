@@ -89,9 +89,14 @@ export default function TimerPopup({ timer, running, onToggle, onReset, onClose 
           onClick={onToggle}
           style={{
             flex: 1, padding: '9px 0',
-            background: running ? 'rgba(196,168,130,0.15)' : 'var(--accent)',
-            border: 'none', borderRadius: 7,
-            color: running ? 'var(--accent)' : 'var(--bg)',
+            // --accent-ui is the accent pushed to 3:1 against the panel, so the
+            // button stays visible as a shape. The running state keeps a border
+            // rather than relying on a tint alone, which disappeared whenever
+            // the accent sat close to the panel colour.
+            background: running ? 'var(--accent-soft)' : 'var(--accent-ui)',
+            border: running ? '1px solid var(--accent-ui)' : '1px solid transparent',
+            borderRadius: 7,
+            color: running ? 'var(--accent-ui)' : 'var(--accent-ui-text)',
             fontFamily: '"JetBrains Mono", monospace', fontSize: 11,
             textTransform: 'uppercase', letterSpacing: '0.08em',
             cursor: 'pointer', transition: 'background 0.2s, color 0.2s',

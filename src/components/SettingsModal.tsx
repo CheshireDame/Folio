@@ -1,10 +1,10 @@
 import { useState, useRef } from 'react'
-import type { CustomTheme, CustomKeySounds } from '../lib/storage'
+import type { CustomTheme, CustomKeySounds, CustomFont } from '../lib/storage'
 import type { SoundType } from '../lib/keyboardSounds'
+import { BUILTIN_FONTS as FONTS } from '../lib/fonts'
 
 const ACCENT_PRESETS = ['#c4a882','#d4a0a0','#90b090','#90a8c0','#b0a0d0','#c8906a','#e8c060','#a0c4d0','#d0a0c0','#80c0a0']
 const BG_PRESETS = ['#1a1814','#f5f0e8','#1c2128','#1a1f1a','#1e1a26','#0d0d0d','#ffffff','#faf8f4','#1a1a2e','#0f1923']
-const FONTS = ['Crimson Pro','Playfair Display','JetBrains Mono','Georgia','Arial','Times New Roman']
 
 const LANGS = [
   { code: 'en',    name: 'English' },
@@ -46,7 +46,12 @@ interface SettingsModalProps {
   editorWidth: number
   lineHeight: number
   accentColor: string
+  // The active theme's own accent, including a custom theme's. Drives the
+  // "Default" reset button next to the accent picker.
+  themeAccent: string
   bgColor: string
+  // The active theme's own background, for the matching "Default" button.
+  themeBg: string
   bgImage: string
   bgBlur: number
   bgDim: number
@@ -103,11 +108,16 @@ interface SettingsModalProps {
   onToolbarTextColor: (s: string) => void
   editorFontFamily: string
   onEditorFontFamily: (s: string) => void
+  customFonts: CustomFont[]
+  onAddCustomFont: (family: string, data: string) => void
+  onDeleteCustomFont: (id: string) => void
+  onExportTheme: (t: CustomTheme) => void
+  onImportTheme: () => void
 }
 
 export default function SettingsModal({
   open, themes, currentTheme, fontSize, editorWidth, lineHeight,
-  accentColor, bgColor, bgImage, bgBlur, bgDim, showScrollbar, canvasAlign,
+  accentColor, themeAccent, bgColor, themeBg, bgImage, bgBlur, bgDim, showScrollbar, canvasAlign,
   onClose, onTheme, onFontSize, onEditorWidth, onLineHeight,
   onAccentColor, onBgColor, onBgImage, onBgBlur, onBgDim, onShowScrollbar, onCanvasAlign, onSpellCheckLang,
   spellCheckLang,
@@ -118,7 +128,8 @@ export default function SettingsModal({
   keySounds, onKeySounds, keySoundsVolume, onKeySoundsVolume,
   customKeySounds, onCustomKeySound, onPreviewSound,
   toolbarColor, onToolbarColor, toolbarTextColor, onToolbarTextColor,
-  editorFontFamily, onEditorFontFamily,
+  editorFontFamily, onEditorFontFamily, customFonts, onAddCustomFont, onDeleteCustomFont,
+  onExportTheme, onImportTheme,
 }: SettingsModalProps) {
   const [saveName, setSaveName]           = useState('')
   const [showSaveInput, setShowSaveInput] = useState(false)
@@ -143,7 +154,10 @@ export default function SettingsModal({
     </div>
   )
 
-  const colorPicker = (lbl: string, val: string, set: (s:string)=>void, presets: string[]) => (
+  // resetTo: the current theme's own value for this color. When the live value
+  // differs, offer a button to snap back to it — same affordance the toolbar
+  // color already has.
+  const colorPicker = (lbl: string, val: string, set: (s:string)=>void, presets: string[], resetTo?: string) => (
     <div style={{ marginBottom: 16 }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 8 }}>
         <span style={{ fontSize: 12, color: 'var(--text2)', width: 120 }}>{lbl}</span>
@@ -151,6 +165,13 @@ export default function SettingsModal({
           <input type="color" value={val} onChange={e => set(e.target.value)} style={{ position: 'absolute', inset: -4, opacity: 0, cursor: 'pointer', width: 'calc(100% + 8px)', height: 'calc(100% + 8px)' }} />
         </div>
         <input type="text" value={val} onChange={e => { if(/^#[0-9a-fA-F]{6}$/.test(e.target.value)) set(e.target.value) }} maxLength={7} style={{ flex: 1, background: 'var(--surface)', border: '1px solid var(--border)', color: 'var(--text)', padding: '5px 8px', borderRadius: 5, fontFamily: '"JetBrains Mono", monospace', fontSize: 12, outline: 'none' }} />
+        {resetTo && val.toLowerCase() !== resetTo.toLowerCase() && (
+          <button onClick={() => set(resetTo)} title="Reset to theme default"
+            style={{ padding: '4px 8px', background: 'transparent', border: '1px solid var(--border)', color: 'var(--text3)', borderRadius: 5, cursor: 'pointer', fontFamily: '"JetBrains Mono", monospace', fontSize: 10, textTransform: 'uppercase' as const, letterSpacing: '0.05em', whiteSpace: 'nowrap' as const }}
+            onMouseOver={e => { e.currentTarget.style.color = 'var(--text)'; e.currentTarget.style.borderColor = 'var(--accent)' }}
+            onMouseOut={e => { e.currentTarget.style.color = 'var(--text3)'; e.currentTarget.style.borderColor = 'var(--border)' }}
+          >Default</button>
+        )}
       </div>
       <div style={{ display: 'flex', gap: 5, flexWrap: 'wrap' as const, paddingLeft: 130 }}>
         {presets.map(c => (
@@ -202,8 +223,8 @@ export default function SettingsModal({
             {customThemes.map((t, i) => (
               <div key={'c' + i}
                 onClick={() => onApplyCustomTheme(t)}
-                onMouseOver={e => { const x = e.currentTarget.querySelector<HTMLElement>('.del'); if (x) x.style.opacity = '1' }}
-                onMouseOut={e => { const x = e.currentTarget.querySelector<HTMLElement>('.del'); if (x) x.style.opacity = '0' }}
+                onMouseOver={e => e.currentTarget.querySelectorAll<HTMLElement>('.del').forEach(x => x.style.opacity = '1')}
+                onMouseOut={e => e.currentTarget.querySelectorAll<HTMLElement>('.del').forEach(x => x.style.opacity = '0')}
                 style={{ position: 'relative' as const, height: 36, borderRadius: 6, overflow: 'hidden', border: '2px solid ' + t.border, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
               >
                 {t.bgImage
@@ -212,6 +233,8 @@ export default function SettingsModal({
                 <span style={{ position: 'relative' as const, zIndex: 1, fontSize: 10, color: t.text2, fontFamily: t.editorFontFamily ? `"${t.editorFontFamily}", Georgia, serif` : undefined, textShadow: t.bgImage ? '0 1px 3px rgba(0,0,0,0.8)' : 'none' }}>{t.name}</span>
                 <button className="del" onClick={e => { e.stopPropagation(); onDeleteCustomTheme(i) }}
                   style={{ position: 'absolute' as const, top: 3, right: 3, width: 14, height: 14, borderRadius: '50%', background: 'rgba(0,0,0,0.65)', border: 'none', color: '#fff', fontSize: 8, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', opacity: 0, transition: 'opacity 0.15s', padding: 0, zIndex: 2 }}>✕</button>
+                <button className="del" onClick={e => { e.stopPropagation(); onExportTheme(t) }} title="Share this theme as a file"
+                  style={{ position: 'absolute' as const, top: 3, left: 3, width: 14, height: 14, borderRadius: '50%', background: 'rgba(0,0,0,0.65)', border: 'none', color: '#fff', fontSize: 8, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', opacity: 0, transition: 'opacity 0.15s', padding: 0, zIndex: 2 }}>↑</button>
               </div>
             ))}
           </div>
@@ -231,19 +254,26 @@ export default function SettingsModal({
                 style={{ padding: '5px 10px', background: 'transparent', border: '1px solid var(--border)', color: 'var(--text3)', borderRadius: 5, cursor: 'pointer', fontFamily: '"JetBrains Mono", monospace', fontSize: 10 }}>✕</button>
             </div>
           ) : (
-            <button onClick={() => setShowSaveInput(true)}
-              style={{ padding: '4px 12px', background: 'transparent', border: '1px dashed var(--border)', color: 'var(--text3)', borderRadius: 5, cursor: 'pointer', fontFamily: '"JetBrains Mono", monospace', fontSize: 10, letterSpacing: '0.06em', textTransform: 'uppercase' as const }}
-              onMouseOver={e => e.currentTarget.style.color = 'var(--accent)'}
-              onMouseOut={e => e.currentTarget.style.color = 'var(--text3)'}
-            >+ Save current as theme</button>
+            <div style={{ display: 'flex', gap: 6 }}>
+              <button onClick={() => setShowSaveInput(true)}
+                style={{ padding: '4px 12px', background: 'transparent', border: '1px dashed var(--border)', color: 'var(--text3)', borderRadius: 5, cursor: 'pointer', fontFamily: '"JetBrains Mono", monospace', fontSize: 10, letterSpacing: '0.06em', textTransform: 'uppercase' as const }}
+                onMouseOver={e => e.currentTarget.style.color = 'var(--accent)'}
+                onMouseOut={e => e.currentTarget.style.color = 'var(--text3)'}
+              >+ Save current as theme</button>
+              <button onClick={onImportTheme} title="Open a .foliotheme file someone shared with you"
+                style={{ padding: '4px 12px', background: 'transparent', border: '1px dashed var(--border)', color: 'var(--text3)', borderRadius: 5, cursor: 'pointer', fontFamily: '"JetBrains Mono", monospace', fontSize: 10, letterSpacing: '0.06em', textTransform: 'uppercase' as const }}
+                onMouseOver={e => e.currentTarget.style.color = 'var(--accent)'}
+                onMouseOut={e => e.currentTarget.style.color = 'var(--text3)'}
+              >↓ Import theme</button>
+            </div>
           )}
         </div>
 
         <div style={{ marginBottom: 20 }}>
           {label('Colors')}
-          {colorPicker('Accent', accentColor, onAccentColor, ACCENT_PRESETS)}
+          {colorPicker('Accent', accentColor, onAccentColor, ACCENT_PRESETS, themeAccent)}
           {savedSwatches(accentPresets, onSaveAccentPreset, onDeleteAccentPreset, c => onAccentColor(c))}
-          {colorPicker('Background', bgColor, onBgColor, BG_PRESETS)}
+          {colorPicker('Background', bgColor, onBgColor, BG_PRESETS, themeBg)}
           {savedSwatches(bgPresets, onSaveBgPreset, onDeleteBgPreset, c => onBgColor(c))}
           <div style={{ borderTop: '1px solid var(--border)', marginTop: 8, paddingTop: 12 }}>
             {label('Toolbar')}
@@ -281,8 +311,51 @@ export default function SettingsModal({
                 style={{ flex: 1, background: 'var(--surface)', border: '1px solid var(--border)', color: 'var(--text)', padding: '5px 8px', borderRadius: 5, fontFamily: `"${editorFontFamily}", Georgia, serif`, fontSize: 13, outline: 'none' }}
               >
                 {FONTS.map(f => <option key={f} value={f} style={{ fontFamily: `"${f}", Georgia, serif` }}>{f}</option>)}
+                {customFonts.length > 0 && (
+                  <optgroup label="Your fonts">
+                    {customFonts.map(f => <option key={f.id} value={f.family} style={{ fontFamily: `"${f.family}", Georgia, serif` }}>{f.family}</option>)}
+                  </optgroup>
+                )}
               </select>
             </div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 8 }}>
+              <span style={{ fontSize: 12, color: 'var(--text2)', width: 120 }}>Upload font</span>
+              <label
+                style={{ flex: 1, display: 'block', padding: '6px 0', border: '1px dashed var(--border)', borderRadius: 5, cursor: 'pointer', textAlign: 'center' as const, fontFamily: '"JetBrains Mono", monospace', fontSize: 10, color: 'var(--text3)', letterSpacing: '0.06em', textTransform: 'uppercase' as const }}
+                onMouseOver={e => e.currentTarget.style.color = 'var(--accent)'}
+                onMouseOut={e => e.currentTarget.style.color = 'var(--text3)'}
+              >
+                + TTF / OTF / WOFF
+                <input type="file" accept=".ttf,.otf,.woff,.woff2,font/*" style={{ display: 'none' }}
+                  onChange={e => {
+                    const file = e.target.files?.[0]
+                    if (!file) return
+                    const reader = new FileReader()
+                    // Family name comes from the filename — the font's internal
+                    // name isn't readable without parsing the binary.
+                    reader.onload = ev => onAddCustomFont(
+                      file.name.replace(/\.[^.]+$/, ''),
+                      ev.target?.result as string,
+                    )
+                    reader.readAsDataURL(file)
+                    e.target.value = ''
+                  }} />
+              </label>
+            </div>
+            {customFonts.length > 0 && (
+              <div style={{ display: 'flex', flexDirection: 'column' as const, gap: 3, paddingLeft: 130 }}>
+                {customFonts.map(f => (
+                  <div key={f.id} style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                    <span style={{ flex: 1, fontFamily: `"${f.family}", Georgia, serif`, fontSize: 13, color: 'var(--text2)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' as const }}>{f.family}</span>
+                    <button onClick={() => onDeleteCustomFont(f.id)} title="Remove font"
+                      style={{ background: 'none', border: 'none', color: 'var(--text3)', cursor: 'pointer', fontSize: 11, padding: '0 2px', opacity: 0.6 }}
+                      onMouseOver={e => { e.currentTarget.style.color = '#e24b4a'; e.currentTarget.style.opacity = '1' }}
+                      onMouseOut={e => { e.currentTarget.style.color = 'var(--text3)'; e.currentTarget.style.opacity = '0.6' }}
+                    >✕</button>
+                  </div>
+                ))}
+              </div>
+            )}
           </div>
         </div>
 

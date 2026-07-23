@@ -274,7 +274,7 @@ export default function IdeationCanvas({ notes, onChange, onAdd }: Props) {
         )}
         <button
           onClick={handleAdd}
-          style={{ background: 'var(--accent)', border: 'none', borderRadius: 7, color: 'var(--bg)', cursor: 'pointer', padding: '8px 16px', fontFamily: '"JetBrains Mono", monospace', fontSize: 11, textTransform: 'uppercase' as const, letterSpacing: '0.08em', boxShadow: '0 4px 16px rgba(0,0,0,0.4)' }}
+          style={{ background: 'var(--accent)', border: 'none', borderRadius: 7, color: 'var(--accent-text)', cursor: 'pointer', padding: '8px 16px', fontFamily: '"JetBrains Mono", monospace', fontSize: 11, textTransform: 'uppercase' as const, letterSpacing: '0.08em', boxShadow: '0 4px 16px rgba(0,0,0,0.4)' }}
         >+ Add idea</button>
       </div>
 

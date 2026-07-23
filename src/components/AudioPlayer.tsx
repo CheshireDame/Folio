@@ -6,13 +6,17 @@ interface AudioPlayerProps {
   tracks: AudioTrack[]
   onAddTrack: (track: AudioTrack) => void
   onRemoveTrack: (id: string) => void
+  // Selected track and volume are controlled by App so that saving a theme can
+  // capture them and applying one can restore them.
+  currentId: string | null
+  onCurrentId: (id: string | null) => void
+  volume: number
+  onVolume: (v: number) => void
 }
 
-export default function AudioPlayer({ open, tracks, onAddTrack, onRemoveTrack }: AudioPlayerProps) {
+export default function AudioPlayer({ open, tracks, onAddTrack, onRemoveTrack, currentId, onCurrentId, volume, onVolume }: AudioPlayerProps) {
   const audioRef          = useRef<HTMLAudioElement>(null)
-  const [currentId, setCurrentId] = useState<string | null>(null)
   const [playing,   setPlaying]   = useState(false)
-  const [volume,    setVolume]    = useState(60)
 
   useEffect(() => {
     if (audioRef.current) audioRef.current.volume = volume / 100
@@ -23,7 +27,7 @@ export default function AudioPlayer({ open, tracks, onAddTrack, onRemoveTrack }:
     if (!a) return
     if (!currentId) { a.pause(); return }
     const track = tracks.find(t => t.id === currentId)
-    if (!track) { setCurrentId(null); setPlaying(false); return }
+    if (!track) { onCurrentId(null); setPlaying(false); return }
     if (a.src !== track.data) a.src = track.data
     if (playing) a.play().catch(() => setPlaying(false))
     else a.pause()
@@ -31,7 +35,7 @@ export default function AudioPlayer({ open, tracks, onAddTrack, onRemoveTrack }:
 
   const playTrack = (id: string) => {
     if (currentId === id) setPlaying(p => !p)
-    else { setCurrentId(id); setPlaying(true) }
+    else { onCurrentId(id); setPlaying(true) }
   }
 
   const stop = () => {
@@ -85,7 +89,7 @@ export default function AudioPlayer({ open, tracks, onAddTrack, onRemoveTrack }:
           {/* Volume */}
           <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 12 }}>
             <span style={{ fontFamily: '"JetBrains Mono", monospace', fontSize: 9, color: 'var(--text3)', width: 24, flexShrink: 0 }}>VOL</span>
-            <input type="range" min={0} max={100} value={volume} onChange={e => setVolume(Number(e.target.value))}
+            <input type="range" min={0} max={100} value={volume} onChange={e => onVolume(Number(e.target.value))}
               style={{ flex: 1, accentColor: 'var(--accent)' }} />
             <span style={{ fontFamily: '"JetBrains Mono", monospace', fontSize: 9, color: 'var(--text3)', minWidth: 28, textAlign: 'right' }}>{volume}%</span>
           </div>

@@ -102,6 +102,12 @@ export default function MindMap({ data, onChange, onClose, ideationNotes, notesS
     })
   }, [])
   useEffect(() => {
+    // Not while a drag is in flight. Bending a curve rewrites data.edges on
+    // every mousemove tick, so nudging here fired continuously and read as the
+    // canvas zooming in and out under the cursor. The mouseup handler runs it
+    // once instead, when the shape is final — which is the only moment the
+    // stale hit-region actually needs invalidating.
+    if (dragRef.current) return
     nudgeHitTest()
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [data.edges, data.nodes, data.images, heights])
@@ -244,8 +250,12 @@ export default function MindMap({ data, onChange, onClose, ideationNotes, notesS
       // Any of these can leave an edge a different shape than it was at mousedown
       // (moving an endpoint's bubble/image, dragging a bend point, or wiring up a
       // brand-new edge) — see geomVersion above for why that needs a fresh DOM node.
-      if (d.mode === 'node' || d.mode === 'image' || d.mode === 'edgePoint' || d.mode === 'connect') {
+      if (d.mode === 'node' || d.mode === 'image' || d.mode === 'edgePoint' || d.mode === 'connect' || d.mode === 'resize') {
         setGeomVersion(v => v + 1)
+        // The effect above skips itself mid-drag, so this is where the shape
+        // that just settled gets its hit-region invalidated — once, not once
+        // per mousemove.
+        nudgeHitTest()
       }
       // Panning doesn't change any edge's shape, but it does shift where on screen
       // that shape's (WebView2-cached) hit-region sits — see nudgeHitTest above.
@@ -728,8 +738,16 @@ export default function MindMap({ data, onChange, onClose, ideationNotes, notesS
       )}
 
       {/* Top toolbar */}
-      <div style={{ position: 'absolute', top: 14, left: 14, right: 14, display: 'flex', alignItems: 'center', gap: 8 }}>
-        <span style={{ fontFamily: '"Playfair Display", serif', fontSize: 15, color: 'var(--accent)', fontStyle: 'italic', marginRight: 6 }}>Mind Map</span>
+      {/* Sits on its own contrast-checked bar rather than straight on --bg: a
+          custom theme can set any background colour, and the label/buttons were
+          washing out against saturated ones. --menu-* is the palette App already
+          pushes to AAA contrast, so redefining --text/--text2/--text3 here keeps
+          every child (buttons, menus) legible on any theme. */}
+      <div style={{ position: 'absolute', top: 14, left: 14, right: 14, display: 'flex', alignItems: 'center', gap: 8,
+        background: 'var(--menu-bg)', border: '1px solid var(--border)', borderRadius: 10, padding: '8px 10px',
+        boxShadow: '0 4px 18px rgba(0,0,0,0.35)',
+        '--text': 'var(--menu-text)', '--text2': 'var(--menu-text2)', '--text3': 'var(--menu-text3)' } as React.CSSProperties}>
+        <span style={{ fontFamily: '"Playfair Display", serif', fontSize: 15, color: 'var(--text)', fontStyle: 'italic', marginRight: 6 }}>Mind Map</span>
         <Btn onClick={addBubble} primary>+ Bubble</Btn>
         <Btn onClick={() => fileInputRef.current?.click()}>Image</Btn>
         <Btn onClick={doOpen}>Open</Btn>
@@ -767,7 +785,13 @@ export default function MindMap({ data, onChange, onClose, ideationNotes, notesS
       )}
 
       {/* Hint */}
-      <div style={{ position: 'absolute', bottom: 16, left: 16, ...labelStyle, fontSize: 10, color: 'var(--text2)', pointerEvents: 'none', lineHeight: 1.6 }}>
+      {/* On its own contrast-checked pill for the same reason as the toolbar —
+          it previously sat straight on --bg, which a custom theme can set to
+          any colour, washing the hint out entirely. */}
+      <div style={{ position: 'absolute', bottom: 16, left: 16, ...labelStyle, fontSize: 10,
+        background: 'var(--menu-bg)', color: 'var(--menu-text2)',
+        border: '1px solid var(--border)', borderRadius: 8, padding: '6px 10px',
+        pointerEvents: 'none', lineHeight: 1.6 }}>
         Drag the ◦ handle to connect · double-click a line to bend it · Shift+drag to multi-select · drag canvas to pan · scroll to zoom
       </div>
 
@@ -780,12 +804,16 @@ function Btn({ children, onClick, primary, active }: { children: React.ReactNode
   const [hover, setHover] = useState(false)
   // Use --text (the high-contrast colour) for labels so buttons stay legible
   // across every theme; accent only for the primary/active states.
-  const color = primary ? 'var(--bg)' : (active || hover) ? 'var(--accent)' : 'var(--text)'
+  // --accent-text is picked for contrast against the accent itself; --bg was a
+  // coin flip once a custom theme could set bg and accent to similar colours.
+  const color = primary ? 'var(--accent-ui-text)' : (active || hover) ? 'var(--accent-ui)' : 'var(--text)'
   return (
     <button onClick={onClick}
       onMouseEnter={() => setHover(true)} onMouseLeave={() => setHover(false)}
-      style={{ background: primary ? 'var(--accent)' : 'var(--surface)',
-        border: `1px solid ${active ? 'var(--accent)' : 'var(--border)'}`, borderRadius: 6,
+      // Transparent so the label reads against the bar's contrast-checked
+      // --menu-bg rather than --surface, which no theme guarantees.
+      style={{ background: primary ? 'var(--accent-ui)' : 'transparent',
+        border: `1px solid ${active ? 'var(--accent-ui)' : 'var(--border)'}`, borderRadius: 6,
         color, cursor: 'pointer', padding: '6px 12px', transition: 'color 0.15s, border-color 0.15s',
         fontFamily: '"JetBrains Mono", monospace', fontSize: 11, textTransform: 'uppercase', letterSpacing: '0.07em', whiteSpace: 'nowrap' }}>
       {children}
